@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+supabase
+google-generativeai
+python-dotenv
+pydantic
+python-multipart
+bcrypt
