@@ -10,6 +10,8 @@ import Reports from './pages/Reports';
 import Prescriptions from './pages/Prescriptions';
 import Symptoms from './pages/Symptoms';
 import Settings from './pages/Settings';
+import PrescriptionScan from './pages/PrescriptionScan';
+import Reminders from './pages/Reminders';
 
 function App() {
   const [profile, setProfile] = useState(null);
@@ -60,6 +62,8 @@ function App() {
                       <Route path="/symptoms" element={<Symptoms />} />
                       <Route path="/reports" element={<Reports />} />
                       <Route path="/prescriptions" element={<Prescriptions />} />
+                      <Route path="/prescription-scan" element={<PrescriptionScan />} />
+                      <Route path="/reminders" element={<Reminders />} />
                       <Route path="/settings" element={<Settings />} />
                     </Routes>
                   </main>

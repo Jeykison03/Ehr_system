@@ -19,14 +19,22 @@ class UserLogin(BaseModel):
 class SymptomCreate(BaseModel):
     """
     Model for recording a new patient symptom entry.
+    Required: patient_id, description, occurrence_date
+    Everything else is optional.
     """
     patient_id: str
     description: str
-    severity: int
+    severity: Optional[int] = 5
     duration: Optional[str] = None
     location: Optional[str] = None
     associated_symptoms: Optional[str] = None
-    occurrence_date: Optional[str] = None
+    occurrence_date: str  # required — ISO date string
+    # New extended check-in fields
+    notes: Optional[str] = None
+    blood_sugar: Optional[float] = None
+    meal_info: Optional[str] = None
+    medication_taken: Optional[str] = None  # "yes" | "no" | "partial"
+    image_url: Optional[str] = None         # base64 data URI
 
 class PrescriptionCreate(BaseModel):
     """
@@ -39,3 +47,9 @@ class PrescriptionCreate(BaseModel):
     frequency: str
     duration: str
     instructions: Optional[str] = None
+
+class PrescriptionScanRequest(BaseModel):
+    """
+    Model for AI prescription image analysis.
+    """
+    image_base64: str  # base64-encoded image string (data URI or raw base64)

@@ -1,547 +1,413 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Activity, 
-  TrendingUp, 
-  MessageSquare, 
-  AlertCircle,
-  BrainCircuit
+import { useNavigate } from 'react-router-dom';
+import {
+  Activity, TrendingUp, Calendar, Plus,
+  ScanLine, Bell, ChevronRight, AlertTriangle,
+  HeartPulse, BrainCircuit, Droplets, Clock
 } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
-import { getStoredUser } from '../lib/session';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer 
-} from 'recharts';
-import axios from 'axios';
 import { API_BASE } from '../lib/config';
 
+const getSeverityColor = (s) => {
+  if (s <= 3) return { bg: '#d1fae5', text: '#065f46', border: '#6ee7b7' };
+  if (s <= 6) return { bg: '#fef3c7', text: '#92400e', border: '#fcd34d' };
+  return { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' };
+};
+
+const getSeverityLabel = (s) => {
+  if (s <= 3) return 'Mild';
+  if (s <= 6) return 'Moderate';
+  return 'Severe';
+};
+
 const PatientDashboard = () => {
+  const navigate = useNavigate();
   const [symptoms, setSymptoms] = useState([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newSymptom, setNewSymptom] = useState({ 
-    description: '', 
-    severity: 5,
-    duration: '',
-    durationUnit: 'hours',
-    startDate: new Date().toISOString().split('T')[0],
-    location: '',
-    associatedSymptoms: []
-  });
   const [aiSummary, setAiSummary] = useState('');
   const [loadingAi, setLoadingAi] = useState(false);
-  const [alerts, setAlerts] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchSymptoms();
-    fetchAlerts();
-    fetchNotifications();
-  }, []);
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const firstName = user.first_name || user.full_name?.split(' ')[0] || 'Patient';
+
+  useEffect(() => { fetchSymptoms(); }, []);
 
   const fetchSymptoms = async () => {
-    try {
-      const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-      const user = storedUser ? JSON.parse(storedUser) : null;
-      if (!user?.id) return;
-
-      const response = await fetch(`${API_BASE}/symptoms/patient/${user.id}`);
-      const data = await response.json();
-      if (!response.ok) {
-        console.error('Failed to load symptoms:', data.detail || 'server error');
-        return;
-      }
-      setSymptoms(data || []);
-    } catch (err) {
-      console.error('Failed to load symptoms:', err);
-    }
-  };
-
-  const fetchAlerts = async () => {
-    const user = getStoredUser();
     if (!user?.id) return;
     try {
-      const response = await axios.get(`${API_BASE}/alerts/${user.id}`);
-      setAlerts(response.data.alerts);
-    } catch (err) {
-      console.error("Alerts fetch failed", err);
-    }
-  };
-
-  const fetchNotifications = async () => {
-    const user = getStoredUser();
-    if (!user?.id) return;
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('patient_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(3);
-
-    if (error && (error.message?.toLowerCase().includes('relation') || error.message?.toLowerCase().includes('table'))) {
-      setNotifications([]);
-      return;
-    }
-    if (data) setNotifications(data);
-  };
-
-  const handleAddSymptom = async (e) => {
-    e.preventDefault();
-    try {
-      const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-      const user = storedUser ? JSON.parse(storedUser) : null;
-      if (!user?.id) {
-        throw new Error('No authenticated patient found. Please log in again.');
-      }
-
-      const payload = {
-        patient_id: user.id,
-        description: newSymptom.description,
-        severity: newSymptom.severity,
-        duration: newSymptom.duration ? `${newSymptom.duration} ${newSymptom.durationUnit}` : null,
-        location: newSymptom.location || null,
-        associated_symptoms: newSymptom.associatedSymptoms.length > 0 ? newSymptom.associatedSymptoms.join(', ') : null,
-        occurrence_date: newSymptom.startDate
-      };
-
-      const response = await fetch(`${API_BASE}/symptoms/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Failed to save symptom.');
-      }
-
-      setShowAddModal(false);
-      setNewSymptom({ 
-        description: '', 
-        severity: 5,
-        duration: '',
-        durationUnit: 'hours',
-        startDate: new Date().toISOString().split('T')[0],
-        location: '',
-        associatedSymptoms: []
-      });
-      fetchSymptoms();
-      fetchAlerts();
-      fetchNotifications();
-    } catch (err) {
-      console.error('Save symptom failed:', err);
-      alert('Failed to save symptom: ' + (err.message || 'Unknown error'));
+      const res = await fetch(`${API_BASE}/symptoms/patient/${user.id}`);
+      const data = await res.json();
+      setSymptoms(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
   const generateAiSummary = async () => {
+    if (!user?.id) return;
     setLoadingAi(true);
-    const user = getStoredUser();
-    if (!user?.id) {
-      setLoadingAi(false);
-      return;
-    }
     try {
-      const response = await axios.post(`${API_BASE}/ai/summarize-history?patient_id=${user.id}`);
-      setAiSummary(response.data.summary);
-    } catch (err) {
-      console.error(err);
+      const res = await fetch(`${API_BASE}/ai/summarize-history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patient_id: user.id })
+      });
+      const d = await res.json();
+      setAiSummary(d.summary || 'No summary generated.');
+    } catch (e) {
+      setAiSummary('Could not connect to AI service.');
     } finally {
       setLoadingAi(false);
     }
   };
 
+  const avgSeverity = symptoms.length
+    ? (symptoms.reduce((a, s) => a + (s.severity || 0), 0) / symptoms.length).toFixed(1)
+    : '—';
+
+  const lastCheckin = symptoms[0]?.occurrence_date || symptoms[0]?.created_at;
+  const recentSymptoms = symptoms.slice(0, 6);
+
+  const now = new Date();
+  const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening';
+
   return (
-    <div className="patient-dashboard">
-      <header className="page-header">
-        <div>
-          <h1>Welcome Back</h1>
-          <p>Here's your health overview for today.</p>
-        </div>
-        <div className="header-image">
-          <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="60" cy="40" r="18" stroke="var(--primary)" strokeWidth="2" fill="none"/>
-            <path d="M60 58V90" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round"/>
-            <path d="M35 70C35 70 30 75 30 80C30 85 35 90 40 92" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" fill="none"/>
-            <path d="M85 70C85 70 90 75 90 80C90 85 85 90 80 92" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" fill="none"/>
-            <path d="M45 75C45 75 45 85 45 92" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" fill="none"/>
-            <path d="M75 75C75 75 75 85 75 92" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" fill="none"/>
-            <circle cx="50" cy="38" r="3" fill="var(--primary)"/>
-            <circle cx="70" cy="38" r="3" fill="var(--primary)"/>
-            <path d="M55 45C55 45 60 48 65 45" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" fill="none"/>
-          </svg>
-        </div>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-          <Plus size={18} />
-          <span>Report Symptom</span>
-        </button>
-      </header>
-
-      {alerts.length > 0 && (
-        <div className="alerts-section">
-          {alerts.map((alert, i) => (
-            <div key={i} className={`alert-card ${alert.type}`}>
-              <AlertCircle size={20} />
-              <span>{alert.message}</span>
+    <div className="pd-root">
+      {/* HERO HEADER */}
+      <div className="pd-hero">
+        <div className="pd-hero-glow" />
+        <div className="pd-hero-content">
+          <div>
+            <p className="pd-greeting">{greeting} 👋</p>
+            <h1 className="pd-name">{firstName}</h1>
+            <p className="pd-subtitle">Here's your health overview for today, {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          </div>
+          <div className="pd-health-score">
+            <HeartPulse size={28} className="hs-icon" />
+            <div>
+              <div className="hs-label">Health Logs</div>
+              <div className="hs-value">{symptoms.length} entries</div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {notifications.length > 0 && (
-        <div className="alerts-section">
-          {notifications.map((n) => (
-            <div key={n.id} className="alert-card warning">
-              <MessageSquare size={20} />
-              <span>
-                <strong style={{ marginRight: 6 }}>{n.title || 'Update'}:</strong>
-                {n.message}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-label">Total Logs</div>
-          <div className="stat-value">{symptoms.length}</div>
-          <Activity size={24} color="var(--primary)" />
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Avg. Severity</div>
-          <div className="stat-value">
-            {symptoms.length > 0 
-              ? (symptoms.reduce((acc, s) => acc + s.severity, 0) / symptoms.length).toFixed(1)
-              : '0'
-            }
-          </div>
-          <TrendingUp size={24} color="var(--success)" />
-        </div>
-      </div>
-
-      <div className="dashboard-grid">
-        <div className="chart-section glass-card">
-          <h3>Symptom Timeline</h3>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={symptoms}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="occurrence_date" />
-                <YAxis domain={[0, 10]} />
-                <Tooltip />
-                <Line 
-                  type="monotone" 
-                  dataKey="severity" 
-                  stroke="var(--primary)" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: 'var(--primary)' }}
-                  activeDot={{ r: 8 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="ai-assistant-section glass-card">
-          <div className="ai-header">
-            <BrainCircuit size={24} color="var(--primary)" />
-            <h3>AI Health Summary</h3>
-          </div>
-          <div className="ai-content">
-            {aiSummary ? (
-              <p>{aiSummary}</p>
-            ) : (
-              <p className="placeholder">Need a summary of your recent logs? Ask our AI assistant.</p>
-            )}
-          </div>
-          <button 
-            className="btn btn-outline" 
-            onClick={generateAiSummary}
-            disabled={loadingAi}
-          >
-            {loadingAi ? 'Analyzing...' : 'Generate Summary'}
+        {/* QUICK ACTIONS */}
+        <div className="pd-quick-actions">
+          <button className="qa-btn qa-primary" onClick={() => navigate('/symptoms')}>
+            <Plus size={18} />
+            <span>Log Symptom</span>
+            <ChevronRight size={16} className="qa-arrow" />
+          </button>
+          <button className="qa-btn qa-purple" onClick={() => navigate('/prescription-scan')}>
+            <ScanLine size={18} />
+            <span>Scan Prescription</span>
+            <ChevronRight size={16} className="qa-arrow" />
+          </button>
+          <button className="qa-btn qa-orange" onClick={() => navigate('/reminders')}>
+            <Bell size={18} />
+            <span>Set Reminder</span>
+            <ChevronRight size={16} className="qa-arrow" />
           </button>
         </div>
       </div>
 
-      {showAddModal && (
-        <div className="modal-overlay">
-          <div className="modal-content glass-card">
-            <h3>📋 Log New Symptom</h3>
-            <form onSubmit={handleAddSymptom}>
-              <div className="form-group">
-                <label className="form-label">What symptom are you experiencing?</label>
-                <input 
-                  type="text"
-                  placeholder="E.g. Dizziness, Headache, Fever, Nausea..."
-                  value={newSymptom.description}
-                  onChange={(e) => setNewSymptom({...newSymptom, description: e.target.value})}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Location (if applicable)</label>
-                <input 
-                  type="text"
-                  placeholder="E.g. Head, Chest, Back, Stomach..."
-                  value={newSymptom.location}
-                  onChange={(e) => setNewSymptom({...newSymptom, location: e.target.value})}
-                />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">When did it start?</label>
-                  <input 
-                    type="date"
-                    value={newSymptom.startDate}
-                    onChange={(e) => setNewSymptom({...newSymptom, startDate: e.target.value})}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">How long has it lasted?</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input 
-                      type="number"
-                      placeholder="Duration"
-                      min="0"
-                      value={newSymptom.duration}
-                      onChange={(e) => setNewSymptom({...newSymptom, duration: e.target.value})}
-                      style={{ flex: 1 }}
-                    />
-                    <select 
-                      value={newSymptom.durationUnit}
-                      onChange={(e) => setNewSymptom({...newSymptom, durationUnit: e.target.value})}
-                      style={{ flex: 0.8 }}
-                    >
-                      <option value="minutes">Minutes</option>
-                      <option value="hours">Hours</option>
-                      <option value="days">Days</option>
-                      <option value="weeks">Weeks</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Severity Level: <strong>{newSymptom.severity}/10</strong></label>
-                <div className="severity-indicator">
-                  <input 
-                    type="range" 
-                    min="1" 
-                    max="10" 
-                    value={newSymptom.severity}
-                    onChange={(e) => setNewSymptom({...newSymptom, severity: parseInt(e.target.value)})}
-                    className="severity-slider"
-                  />
-                  <div className="severity-labels">
-                    <span>Mild</span>
-                    <span>Moderate</span>
-                    <span>Severe</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Associated Symptoms</label>
-                <div className="checkbox-group">
-                  {['Fever', 'Fatigue', 'Nausea', 'Headache', 'Cough', 'Chills'].map(sym => (
-                    <label key={sym} className="checkbox-label">
-                      <input 
-                        type="checkbox"
-                        checked={newSymptom.associatedSymptoms.includes(sym)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setNewSymptom({...newSymptom, associatedSymptoms: [...newSymptom.associatedSymptoms, sym]});
-                          } else {
-                            setNewSymptom({...newSymptom, associatedSymptoms: newSymptom.associatedSymptoms.filter(s => s !== sym)});
-                          }
-                        }}
-                      />
-                      {sym}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="modal-actions">
-                <button type="button" className="btn btn-outline" onClick={() => setShowAddModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Symptom Log</button>
-              </div>
-            </form>
+      {/* STATS ROW */}
+      <div className="pd-stats">
+        <div className="pd-stat-card" style={{ '--accent-h': '217', '--accent-s': '91%', '--accent-l': '60%' }}>
+          <div className="psc-icon-wrap">
+            <Activity size={22} />
+          </div>
+          <div>
+            <div className="psc-label">Total Logs</div>
+            <div className="psc-value">{symptoms.length}</div>
           </div>
         </div>
-      )}
+        <div className="pd-stat-card" style={{ '--accent-h': '158', '--accent-s': '64%', '--accent-l': '52%' }}>
+          <div className="psc-icon-wrap">
+            <TrendingUp size={22} />
+          </div>
+          <div>
+            <div className="psc-label">Avg Severity</div>
+            <div className="psc-value">{avgSeverity}<span className="psc-unit">/10</span></div>
+          </div>
+        </div>
+        <div className="pd-stat-card" style={{ '--accent-h': '38', '--accent-s': '92%', '--accent-l': '50%' }}>
+          <div className="psc-icon-wrap">
+            <Droplets size={22} />
+          </div>
+          <div>
+            <div className="psc-label">Blood Sugar Logs</div>
+            <div className="psc-value">{symptoms.filter(s => s.blood_sugar).length}</div>
+          </div>
+        </div>
+        <div className="pd-stat-card" style={{ '--accent-h': '271', '--accent-s': '81%', '--accent-l': '66%' }}>
+          <div className="psc-icon-wrap">
+            <Clock size={22} />
+          </div>
+          <div>
+            <div className="psc-label">Last Check-in</div>
+            <div className="psc-value psc-date">{lastCheckin ? new Date(lastCheckin).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* MAIN GRID */}
+      <div className="pd-main-grid">
+
+        {/* RECENT SYMPTOMS FEED */}
+        <div className="pd-card pd-feed">
+          <div className="pdc-header">
+            <h3><Activity size={18} /> Recent Symptoms</h3>
+            <button className="pdc-link" onClick={() => navigate('/symptoms')}>View all →</button>
+          </div>
+
+          {loading ? (
+            <div className="pd-loading">
+              <div className="pd-spinner" />
+              <p>Loading your health data...</p>
+            </div>
+          ) : recentSymptoms.length === 0 ? (
+            <div className="pd-empty">
+              <AlertTriangle size={32} />
+              <p>No symptoms logged yet. <br /><strong>Tap "Log Symptom" above to get started.</strong></p>
+            </div>
+          ) : (
+            <div className="pd-symptom-list">
+              {recentSymptoms.map((s, i) => {
+                const sc = getSeverityColor(s.severity || 5);
+                return (
+                  <div key={s.id || i} className="pd-symptom-row">
+                    <div className="psr-left">
+                      <div className="psr-dot" style={{ background: sc.text }} />
+                      <div>
+                        <div className="psr-name">{s.description}</div>
+                        <div className="psr-meta">
+                          {s.location && <span>📍 {s.location}</span>}
+                          {s.duration && <span>⏱ {s.duration}</span>}
+                          {s.blood_sugar && <span>🩸 {s.blood_sugar} mg/dL</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="psr-right">
+                      <span className="psr-badge" style={{ background: sc.bg, color: sc.text, border: `1px solid ${sc.border}` }}>
+                        {getSeverityLabel(s.severity || 5)} {s.severity}/10
+                      </span>
+                      <span className="psr-date">
+                        {s.occurrence_date ? new Date(s.occurrence_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div className="pd-right-col">
+          {/* AI HEALTH SUMMARY */}
+          <div className="pd-card pd-ai">
+            <div className="pdc-header">
+              <h3><BrainCircuit size={18} /> AI Health Summary</h3>
+            </div>
+            <div className="pd-ai-body">
+              {aiSummary ? (
+                <p className="pd-ai-text">{aiSummary}</p>
+              ) : (
+                <p className="pd-ai-placeholder">Get a 3-sentence clinical summary of your recent health based on all logged symptoms and prescriptions.</p>
+              )}
+            </div>
+            <button className="pd-ai-btn" onClick={generateAiSummary} disabled={loadingAi || symptoms.length === 0}>
+              {loadingAi ? <><span className="btn-spinner" /> Analyzing...</> : '✦ Generate AI Summary'}
+            </button>
+          </div>
+
+          {/* SEVERITY BREAKDOWN */}
+          <div className="pd-card pd-breakdown">
+            <div className="pdc-header">
+              <h3><TrendingUp size={18} /> Severity Breakdown</h3>
+            </div>
+            <div className="pd-bars">
+              {['Mild (1-3)', 'Moderate (4-6)', 'Severe (7-10)'].map((label, i) => {
+                const ranges = [[1,3],[4,6],[7,10]];
+                const [lo, hi] = ranges[i];
+                const count = symptoms.filter(s => s.severity >= lo && s.severity <= hi).length;
+                const pct = symptoms.length ? Math.round((count / symptoms.length) * 100) : 0;
+                const colors = ['#10b981', '#f59e0b', '#ef4444'];
+                return (
+                  <div key={label} className="pd-bar-row">
+                    <span className="pd-bar-label">{label}</span>
+                    <div className="pd-bar-track">
+                      <div className="pd-bar-fill" style={{ width: `${pct}%`, background: colors[i] }} />
+                    </div>
+                    <span className="pd-bar-pct">{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
 
       <style jsx>{`
-        .patient-dashboard {
+        .pd-root {
           display: flex;
           flex-direction: column;
-          gap: 2rem;
+          gap: 1.75rem;
+          padding-bottom: 2rem;
+          font-family: 'Inter', sans-serif;
         }
-        .page-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 2rem;
+
+        /* HERO */
+        .pd-hero {
+          background: linear-gradient(135deg, #1e3a5f 0%, #1a2742 50%, #0f1729 100%);
+          border-radius: 1.25rem;
+          padding: 2rem 2rem 1.5rem;
+          position: relative;
+          overflow: hidden;
+          box-shadow: 0 8px 32px rgba(30, 58, 95, 0.35);
         }
-        .page-header h1 { font-size: 2rem; margin: 0; }
-        .page-header p { color: var(--secondary); margin: 0.25rem 0 0 0; }
-        
-        .header-image {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 140px;
-          height: 140px;
-          background: linear-gradient(135deg, #f0f4ff 0%, #e0f0ff 100%);
-          border-radius: 50%;
-          flex-shrink: 0;
+        .pd-hero-glow {
+          position: absolute; top: -80px; right: -80px;
+          width: 300px; height: 300px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(56, 189, 248, 0.15), transparent 70%);
+          pointer-events: none;
         }
-        
-        .dashboard-grid {
-          display: grid;
-          grid-template-columns: 1.5fr 1fr;
-          gap: 1.5rem;
+        .pd-hero-content {
+          display: flex; justify-content: space-between; align-items: flex-start;
+          gap: 1rem; margin-bottom: 1.5rem; position: relative; z-index: 1;
         }
-        
-        .chart-section, .ai-assistant-section {
-          padding: 1.5rem;
+        .pd-greeting { color: #94a3b8; font-size: 0.9rem; margin: 0 0 0.25rem; }
+        .pd-name { color: white; font-size: 2rem; font-weight: 700; margin: 0 0 0.25rem; font-family: 'Outfit', sans-serif; letter-spacing: -0.5px; }
+        .pd-subtitle { color: #64748b; font-size: 0.85rem; margin: 0; }
+        .pd-health-score {
+          display: flex; align-items: center; gap: 0.75rem;
+          background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 1rem; padding: 0.875rem 1.25rem; flex-shrink: 0;
         }
-        
-        .ai-header {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          margin-bottom: 1rem;
+        .hs-icon { color: #f472b6; }
+        .hs-label { color: #94a3b8; font-size: 0.75rem; }
+        .hs-value { color: white; font-weight: 700; font-size: 1rem; }
+
+        /* QUICK ACTIONS */
+        .pd-quick-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; position: relative; z-index: 1; }
+        .qa-btn {
+          display: flex; align-items: center; gap: 0.5rem;
+          padding: 0.625rem 1.1rem; border-radius: 0.625rem; border: none;
+          font-weight: 600; font-size: 0.875rem; cursor: pointer;
+          transition: all 0.2s; color: white;
         }
-        
-        .ai-content {
-          min-height: 120px;
-          margin-bottom: 1.5rem;
-          line-height: 1.6;
-          font-size: 0.95rem;
+        .qa-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.3); }
+        .qa-primary { background: linear-gradient(135deg, #2563eb, #0ea5e9); }
+        .qa-purple { background: linear-gradient(135deg, #7c3aed, #a855f7); }
+        .qa-orange { background: linear-gradient(135deg, #d97706, #f59e0b); }
+        .qa-arrow { opacity: 0.7; }
+
+        /* STATS */
+        .pd-stats {
+          display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;
         }
-        
-        .placeholder { color: var(--secondary); font-style: italic; }
-        
-        .alert-card {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          padding: 1rem;
-          border-radius: var(--radius-md);
-          margin-bottom: 1rem;
-          font-weight: 500;
+        @media (max-width: 1100px) { .pd-stats { grid-template-columns: repeat(2, 1fr); } }
+        .pd-stat-card {
+          background: white; border-radius: 1rem; padding: 1.25rem;
+          border: 1px solid #f1f5f9;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+          display: flex; align-items: center; gap: 1rem;
+          transition: transform 0.2s, box-shadow 0.2s;
         }
-        .alert-card.warning {
-          background: #fffbeb;
-          border: 1px solid #fde68a;
-          color: #92400e;
+        .pd-stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+        .psc-icon-wrap {
+          width: 48px; height: 48px; border-radius: 0.875rem; flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+          background: hsl(var(--accent-h), var(--accent-s), 95%);
+          color: hsl(var(--accent-h), var(--accent-s), 40%);
         }
-        
-        .modal-overlay {
-          position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0,0,0,0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          overflow-y: auto;
+        .psc-label { color: #64748b; font-size: 0.8rem; font-weight: 500; margin-bottom: 0.2rem; }
+        .psc-value { color: #0f172a; font-size: 1.6rem; font-weight: 800; line-height: 1; }
+        .psc-unit { font-size: 0.9rem; color: #94a3b8; font-weight: 500; }
+        .psc-date { font-size: 1.1rem; }
+
+        /* MAIN GRID */
+        .pd-main-grid {
+          display: grid; grid-template-columns: 1.6fr 1fr; gap: 1.5rem;
         }
-        .modal-content {
-          width: 90%;
-          max-width: 600px;
-          padding: 2rem;
-          margin: 2rem auto;
+        @media (max-width: 1000px) { .pd-main-grid { grid-template-columns: 1fr; } }
+
+        .pd-right-col { display: flex; flex-direction: column; gap: 1.25rem; }
+
+        /* CARDS */
+        .pd-card {
+          background: white; border-radius: 1rem;
+          border: 1px solid #f1f5f9;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+          overflow: hidden;
         }
-        .modal-content h3 {
-          margin: 0 0 1.5rem 0;
-          font-size: 1.5rem;
+        .pdc-header {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 1.25rem 1.5rem; border-bottom: 1px solid #f8fafc;
         }
-        
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
+        .pdc-header h3 {
+          display: flex; align-items: center; gap: 0.5rem;
+          font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0;
         }
-        
-        .severity-indicator {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
+        .pdc-link { color: #2563eb; font-size: 0.85rem; font-weight: 600; background: none; border: none; cursor: pointer; }
+        .pdc-link:hover { text-decoration: underline; }
+
+        /* SYMPTOM FEED */
+        .pd-symptom-list { padding: 0.5rem 0; }
+        .pd-symptom-row {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 0.875rem 1.5rem; gap: 1rem;
+          transition: background 0.15s; cursor: default;
         }
-        .severity-slider {
-          width: 100%;
-          height: 6px;
-          border-radius: 3px;
-          background: linear-gradient(90deg, #4ade80 0%, #facc15 50%, #f87171 100%);
-          outline: none;
-          -webkit-appearance: none;
-          appearance: none;
+        .pd-symptom-row:hover { background: #f8fafc; }
+        .pd-symptom-row:not(:last-child) { border-bottom: 1px solid #f1f5f9; }
+        .psr-left { display: flex; align-items: center; gap: 0.875rem; }
+        .psr-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .psr-name { font-weight: 600; color: #0f172a; font-size: 0.925rem; margin-bottom: 0.15rem; }
+        .psr-meta { display: flex; gap: 0.75rem; color: #94a3b8; font-size: 0.775rem; }
+        .psr-right { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; flex-shrink: 0; }
+        .psr-badge { font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 999px; }
+        .psr-date { color: #94a3b8; font-size: 0.75rem; }
+
+        .pd-loading, .pd-empty {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          padding: 3rem; gap: 1rem; color: #94a3b8; text-align: center;
         }
-        .severity-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: var(--primary);
-          cursor: pointer;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        .pd-spinner {
+          width: 28px; height: 28px; border: 3px solid #e2e8f0;
+          border-top-color: #2563eb; border-radius: 50%;
+          animation: spin 0.8s linear infinite;
         }
-        .severity-slider::-moz-range-thumb {
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: var(--primary);
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* AI */
+        .pd-ai-body { padding: 1.25rem 1.5rem; min-height: 100px; }
+        .pd-ai-text { color: #1e293b; line-height: 1.65; font-size: 0.9rem; }
+        .pd-ai-placeholder { color: #94a3b8; font-style: italic; font-size: 0.875rem; line-height: 1.6; }
+        .pd-ai-btn {
+          width: 100%; padding: 0.875rem; border: none; cursor: pointer;
+          background: linear-gradient(95deg, #2563eb, #7c3aed);
+          color: white; font-weight: 600; font-size: 0.9rem;
+          display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+          transition: opacity 0.2s;
         }
-        .severity-labels {
-          display: flex;
-          justify-content: space-between;
-          font-size: 0.8rem;
-          color: var(--secondary);
+        .pd-ai-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .pd-ai-btn:not(:disabled):hover { opacity: 0.9; }
+        .btn-spinner {
+          width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4);
+          border-top-color: white; border-radius: 50%;
+          animation: spin 0.8s linear infinite; display: inline-block;
         }
-        
-        .checkbox-group {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 0.75rem;
-        }
-        .checkbox-label {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem;
-          border-radius: var(--radius-sm);
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-        .checkbox-label:hover {
-          background: var(--background);
-        }
-        .checkbox-label input[type="checkbox"] {
-          width: 18px;
-          height: 18px;
-          cursor: pointer;
-        }
-        
-        .modal-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 1rem;
-          margin-top: 2rem;
-        }
+
+        /* BREAKDOWN */
+        .pd-bars { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+        .pd-bar-row { display: flex; align-items: center; gap: 0.75rem; }
+        .pd-bar-label { font-size: 0.8rem; color: #64748b; min-width: 110px; }
+        .pd-bar-track { flex: 1; height: 8px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
+        .pd-bar-fill { height: 100%; border-radius: 999px; transition: width 0.6s ease; }
+        .pd-bar-pct { font-size: 0.8rem; font-weight: 700; color: #1e293b; min-width: 20px; text-align: right; }
       `}</style>
     </div>
   );

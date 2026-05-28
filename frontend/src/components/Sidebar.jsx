@@ -7,18 +7,26 @@ import {
   Pill, 
   Settings as SettingsIcon, 
   LogOut,
-  User,
-  Activity
+  Activity,
+  ScanLine,
+  Bell
 } from 'lucide-react';
 
 const Sidebar = ({ profile, onLogout }) => {
   const handleLogout = () => onLogout();
+
+  const firstName = profile?.first_name || profile?.full_name?.split(' ')[0] || 'User';
+  const lastName = profile?.last_name || profile?.full_name?.split(' ').slice(1).join(' ') || '';
+  const displayName = `${firstName} ${lastName}`.trim();
+  const initials = `${firstName.charAt(0)}${lastName.charAt(0) || ''}`.toUpperCase();
 
   const patientLinks = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
     { name: 'Symptoms', path: '/symptoms', icon: <Activity size={20} /> },
     { name: 'Reports', path: '/reports', icon: <FileText size={20} /> },
     { name: 'Prescriptions', path: '/prescriptions', icon: <Pill size={20} /> },
+    { name: 'Scan Prescription', path: '/prescription-scan', icon: <ScanLine size={20} /> },
+    { name: 'Reminders', path: '/reminders', icon: <Bell size={20} /> },
   ];
 
   const doctorLinks = [
@@ -44,6 +52,7 @@ const Sidebar = ({ profile, onLogout }) => {
           <NavLink 
             key={link.path} 
             to={link.path}
+            end={link.path === '/'}
             className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
           >
             {link.icon}
@@ -62,10 +71,10 @@ const Sidebar = ({ profile, onLogout }) => {
       <div className="sidebar-footer">
         <div className="user-info">
           <div className="user-avatar">
-            {profile?.full_name?.charAt(0) || 'U'}
+            {initials}
           </div>
           <div className="user-details">
-            <span className="user-name">{profile?.full_name}</span>
+            <span className="user-name">{displayName}</span>
             <span className="user-role">{profile?.role}</span>
           </div>
         </div>
@@ -95,18 +104,19 @@ const Sidebar = ({ profile, onLogout }) => {
           flex: 1;
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
+          gap: 0.25rem;
         }
         .mt-auto { margin-top: auto; border-top: 1px solid var(--border); padding-top: 1rem; }
         .nav-link {
           display: flex;
           align-items: center;
           gap: 1rem;
-          padding: 0.75rem 1rem;
+          padding: 0.7rem 1rem;
           color: var(--secondary);
           text-decoration: none;
           border-radius: var(--radius-md);
           font-weight: 500;
+          font-size: 0.9rem;
           transition: all 0.2s;
         }
         .nav-link:hover {
@@ -138,15 +148,21 @@ const Sidebar = ({ profile, onLogout }) => {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-weight: 600;
+          font-weight: 700;
+          font-size: 0.875rem;
+          flex-shrink: 0;
         }
         .user-details {
           display: flex;
           flex-direction: column;
+          min-width: 0;
         }
         .user-name {
           font-weight: 600;
-          font-size: 0.9rem;
+          font-size: 0.875rem;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .user-role {
           font-size: 0.75rem;
@@ -164,6 +180,9 @@ const Sidebar = ({ profile, onLogout }) => {
           padding: 0.5rem;
           border-radius: var(--radius-md);
           width: 100%;
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: background 0.15s;
         }
         .btn-logout:hover {
           background: #fef2f2;

@@ -1,13 +1,16 @@
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI, HTTPException, status, Query, Body, Depends
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
 import os
 import logging
 import datetime
 import uuid
+# pyrefly: ignore [missing-import]
 import bcrypt
 from database import execute_query
-from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate
+from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate, PrescriptionScanRequest
 import google.generativeai as genai
 
 # --- LOGGING CONFIGURATION ---
@@ -227,8 +230,12 @@ async def save_symptom(symptom: SymptomCreate):
         
         data = execute_query(
             """
-            INSERT INTO symptoms (id, patient_id, description, severity, duration, location, associated_symptoms, occurrence_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO symptoms (
+                id, patient_id, description, severity, duration, location,
+                associated_symptoms, occurrence_date,
+                notes, blood_sugar, meal_info, medication_taken, image_url
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -239,7 +246,12 @@ async def save_symptom(symptom: SymptomCreate):
                 symptom.duration,
                 symptom.location,
                 symptom.associated_symptoms,
-                entry_date
+                entry_date,
+                symptom.notes,
+                symptom.blood_sugar,
+                symptom.meal_info,
+                symptom.medication_taken,
+                symptom.image_url
             ),
             fetch="one"
         )
@@ -436,6 +448,52 @@ async def summarize_history(patient_id: str = Body(..., embed=True)):
     except Exception as e:
         logger.error(f"Summarization Error: {str(e)}")
         raise HTTPException(status_code=500, detail="AI Summarization failed.")
+
+@app.post("/ai/scan-prescription")
+async def scan_prescription(req: PrescriptionScanRequest):
+    """
+    Analyzes a base64-encoded prescription photo using Gemini Vision (gemini-1.5-flash).
+    Returns side effects and a brief description per medicine identified.
+    """
+    try:
+        import re as _re
+        import base64 as _base64
+        import google.generativeai as _genai
+
+        # Strip data URI prefix if present (e.g. "data:image/jpeg;base64,...")
+        raw_b64 = _re.sub(r'^data:image/[^;]+;base64,', '', req.image_base64)
+        image_bytes = _base64.b64decode(raw_b64)
+
+        vision_model = _genai.GenerativeModel('gemini-1.5-flash')
+
+        prompt = (
+            "You are a clinical pharmacist AI. Analyze the prescription image provided. "
+            "Identify all medicines or drugs listed. "
+            "For each medicine, output in this exact JSON format: "
+            '{"medicines": [{"name": "...", "description": "one sentence description", "side_effects": ["...", "..."]}]}. '
+            "Only list side effects. Do not give dosage advice. Keep language simple and patient-friendly. "
+            "If you cannot read the image clearly, return an empty medicines array."
+        )
+
+        image_part = {"mime_type": "image/jpeg", "data": image_bytes}
+        response = vision_model.generate_content([prompt, image_part])
+
+        # Try to parse JSON from the response
+        import json as _json
+        text = response.text.strip()
+        # Extract JSON block if wrapped in markdown
+        json_match = _re.search(r'\{[\s\S]*\}', text)
+        if json_match:
+            result = _json.loads(json_match.group())
+        else:
+            result = {"medicines": []}
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Prescription Scan Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI scan failed: {str(e)}")
+
 
 # --- SYSTEM MONITORING ---
 
