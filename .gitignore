@@ -1,0 +1,31 @@
+# Python environment and cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+
+# Frontend dependencies and builds
+node_modules/
+dist/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# System and temporary files
+-s
+.DS_Store
+Thumbs.db
+*.log
+diff.txt
+diff_other.txt
+
+# Environment secrets
+.env
+backend/.env
+frontend/.env

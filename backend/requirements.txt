@@ -1,8 +1,9 @@
 fastapi
 uvicorn
-supabase
 google-generativeai
 python-dotenv
 pydantic
 python-multipart
 bcrypt
+email-validator
+psycopg2-binary
