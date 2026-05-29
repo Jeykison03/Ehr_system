@@ -9,6 +9,8 @@ const Reports = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [customFileName, setCustomFileName] = useState('');
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -33,9 +35,17 @@ const Reports = () => {
     }
   };
 
-  const handleFileUpload = async (e) => {
+  const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    setSelectedFile(file);
+    const lastDot = file.name.lastIndexOf('.');
+    const baseName = lastDot !== -1 ? file.name.substring(0, lastDot) : file.name;
+    setCustomFileName(baseName);
+  };
+
+  const handleUploadSubmit = async () => {
+    if (!selectedFile) return;
 
     setUploading(true);
     setError('');
@@ -45,11 +55,15 @@ const Reports = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
+          const lastDot = selectedFile.name.lastIndexOf('.');
+          const extension = lastDot !== -1 ? selectedFile.name.substring(lastDot) : '';
+          const finalName = (customFileName.trim() || 'Unnamed_Report') + extension;
+
           const payload = {
             patient_id: user.id,
-            file_name: file.name,
+            file_name: finalName,
             file_url: reader.result,
-            file_type: file.type
+            file_type: selectedFile.type
           };
 
           const res = await fetch(`${API_BASE}/reports/save`, {
@@ -61,6 +75,8 @@ const Reports = () => {
           if (!res.ok) throw new Error(data.detail || 'Failed to save report to database.');
 
           setSuccess(true);
+          setSelectedFile(null);
+          setCustomFileName('');
           fetchReports();
           setTimeout(() => setSuccess(false), 2000);
         } catch (err) {
@@ -69,7 +85,7 @@ const Reports = () => {
           setUploading(false);
         }
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(selectedFile);
 
     } catch (err) {
       setError(err.message);
@@ -164,13 +180,53 @@ const Reports = () => {
         </div>
         <p className="rup-desc">Upload clinical document scans, blood test sheets, or x-ray photos (PNG/JPG/PDF formats) directly to your secure archive.</p>
         
-        <div className="rup-action-zone">
-          <label className="btn-upload">
-            <Upload size={18} />
-            <span>{uploading ? 'Processing File...' : 'Select & Upload Report'}</span>
-            <input type="file" hidden onChange={handleFileUpload} disabled={uploading} />
-          </label>
-        </div>
+        {!selectedFile ? (
+          <div className="rup-action-zone">
+            <label className="btn-upload">
+              <Upload size={18} />
+              <span>Select Report File</span>
+              <input type="file" hidden onChange={handleFileChange} />
+            </label>
+          </div>
+        ) : (
+          <div className="rup-form-zone">
+            <div className="rup-file-detail">
+              <FileText size={16} color="#2563eb" />
+              <span>Selected: <strong>{selectedFile.name}</strong> ({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+            </div>
+            
+            <div className="rup-input-group">
+              <label htmlFor="customName">✏️ Custom Report Name:</label>
+              <input 
+                id="customName"
+                type="text" 
+                placeholder="Type a perfect name for your file..." 
+                value={customFileName}
+                onChange={(e) => setCustomFileName(e.target.value)}
+                disabled={uploading}
+              />
+            </div>
+            
+            <div className="rup-buttons">
+              <button className="btn-save" onClick={handleUploadSubmit} disabled={uploading || !customFileName.trim()}>
+                {uploading ? (
+                  <>
+                    <Loader size={16} className="rep-spin" />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={16} />
+                    <span>Save to Vault</span>
+                  </>
+                )}
+              </button>
+              <button className="btn-cancel" onClick={() => { setSelectedFile(null); setCustomFileName(''); }} disabled={uploading}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <style jsx>{`
@@ -276,6 +332,40 @@ const Reports = () => {
           cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
         }
         .btn-upload:hover { transform: translateY(-1px); opacity: 0.95; }
+
+        .rup-form-zone {
+          display: flex; flex-direction: column; gap: 0.85rem; 
+          background: rgba(255, 255, 255, 0.4); padding: 1rem; 
+          border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.5); 
+          margin-top: 0.5rem;
+        }
+        .rup-file-detail { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #475569; }
+        .rup-file-detail strong { color: #0f172a; word-break: break-all; }
+        .rup-input-group { display: flex; flex-direction: column; gap: 0.35rem; }
+        .rup-input-group label { font-size: 0.8rem; font-weight: 700; color: #475569; }
+        .rup-input-group input {
+          background: white; border: 1.5px solid #cbd5e1; border-radius: 0.5rem; 
+          padding: 0.6rem 0.8rem; font-size: 0.875rem; color: #0f172a; outline: none; 
+          font-family: inherit; transition: border-color 0.2s;
+        }
+        .rup-input-group input:focus { border-color: #2563eb; }
+        .rup-buttons { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
+        
+        .btn-save {
+          display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem;
+          background: linear-gradient(135deg, #2563eb, #0ea5e9); color: white;
+          border: none; border-radius: 0.5rem; font-weight: 700; font-size: 0.825rem;
+          cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+        }
+        .btn-save:hover { transform: translateY(-1px); opacity: 0.95; }
+        .btn-save:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        
+        .btn-cancel {
+          padding: 0.6rem 1rem; background: #e2e8f0; color: #475569; border: none; 
+          border-radius: 0.5rem; font-weight: 600; font-size: 0.825rem; cursor: pointer; 
+          transition: all 0.15s;
+        }
+        .btn-cancel:hover { background: #cbd5e1; color: #1e293b; }
 
         .rep-alert { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; border-radius: 0.625rem; font-size: 0.85rem; font-weight: 500; }
         .rep-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
