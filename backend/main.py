@@ -10,8 +10,8 @@ import uuid
 # pyrefly: ignore [missing-import]
 import bcrypt
 from database import execute_query
-from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate, PrescriptionScanRequest
-import google.generativeai as genai
+from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate, PrescriptionScanRequest, PatientProfileUpdate, ReportSaveRequest
+from groq import Groq
 
 # --- LOGGING CONFIGURATION ---
 logging.basicConfig(
@@ -37,12 +37,11 @@ app.add_middleware(
 
 # --- AI CONFIGURATION ---
 try:
-    GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
-    if not GEMINI_KEY:
-        logger.warning("GEMINI_API_KEY not found in environment variables.")
-    genai.configure(api_key=GEMINI_KEY)
-    ai_model = genai.GenerativeModel('gemini-pro')
-    logger.info("Generative AI Model initialized successfully.")
+    GROQ_KEY = os.environ.get("GROQ_API_KEY")
+    if not GROQ_KEY:
+        logger.warning("GROQ_API_KEY not found in environment variables.")
+    ai_client = Groq(api_key=GROQ_KEY)
+    logger.info("Groq AI Client initialized successfully.")
 except Exception as e:
     logger.error(f"Critical Error: AI Initialization failed: {str(e)}")
 
@@ -399,7 +398,7 @@ async def create_prescription(pres: PrescriptionCreate):
 @app.post("/ai/explain-medicine")
 async def explain_medicine(medicine: str = Body(..., embed=True)):
     """
-    Consults Gemini to explain a medicine to a patient.
+    Consults Groq to explain a medicine to a patient.
     """
     try:
         prompt = (
@@ -407,16 +406,22 @@ async def explain_medicine(medicine: str = Body(..., embed=True)):
             f"Explain what this medicine is for, how it works generally, and 3 safety tips. "
             f"Use simple language and keep it under 150 words."
         )
-        response = ai_model.generate_content(prompt)
-        return {"explanation": response.text}
+        completion = ai_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        explanation = completion.choices[0].message.content
+        return {"explanation": explanation}
     except Exception as e:
-        logger.error(f"Gemini API Error: {str(e)}")
+        logger.error(f"Groq API Error: {str(e)}")
         return {"explanation": "AI service is currently busy. Please consult your doctor for details."}
 
 @app.post("/ai/summarize-history")
 async def summarize_history(patient_id: str = Body(..., embed=True)):
     """
-    Fetches symptoms and prescriptions using direct SQL, and sends them to Gemini for patient health summary.
+    Fetches symptoms and prescriptions using direct SQL, and sends them to Groq for patient health summary.
     """
     try:
         symptoms = execute_query(
@@ -443,8 +448,14 @@ async def summarize_history(patient_id: str = Body(..., embed=True)):
         context = f"History of recent symptoms:\n" + "\n".join(symptoms_list) + "\n\nRecent Prescriptions:\n" + "\n".join(meds_list)
         prompt = f"As a clinical analyst, provide a 3-sentence summary of the patient's current health status based on this data:\n\n{context}"
         
-        response = ai_model.generate_content(prompt)
-        return {"summary": response.text}
+        completion = ai_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        summary_text = completion.choices[0].message.content
+        return {"summary": summary_text}
     except Exception as e:
         logger.error(f"Summarization Error: {str(e)}")
         raise HTTPException(status_code=500, detail="AI Summarization failed.")
@@ -452,47 +463,274 @@ async def summarize_history(patient_id: str = Body(..., embed=True)):
 @app.post("/ai/scan-prescription")
 async def scan_prescription(req: PrescriptionScanRequest):
     """
-    Analyzes a base64-encoded prescription photo using Gemini Vision (gemini-1.5-flash).
+    Analyzes a base64-encoded prescription photo using Groq Vision (llama-3.2-11b-vision-preview).
     Returns side effects and a brief description per medicine identified.
     """
     try:
         import re as _re
-        import base64 as _base64
-        import google.generativeai as _genai
+        from groq import Groq as _Groq
+        import os as _os
+        import json as _json
+
+        # Explicitly configure Groq client inside function context for container robustness
+        groq_api_key = _os.environ.get("GROQ_API_KEY")
+        local_client = _Groq(api_key=groq_api_key)
 
         # Strip data URI prefix if present (e.g. "data:image/jpeg;base64,...")
         raw_b64 = _re.sub(r'^data:image/[^;]+;base64,', '', req.image_base64)
-        image_bytes = _base64.b64decode(raw_b64)
-
-        vision_model = _genai.GenerativeModel('gemini-1.5-flash')
 
         prompt = (
             "You are a clinical pharmacist AI. Analyze the prescription image provided. "
             "Identify all medicines or drugs listed. "
+            "Important: This may be a German prescription containing patient name, address, and insurance number. "
+            "OMIT all personal data, name, address, and insurance information entirely to protect privacy and save tokens. "
+            "ONLY identify and analyze the actual prescribed medicines/drugs. "
             "For each medicine, output in this exact JSON format: "
             '{"medicines": [{"name": "...", "description": "one sentence description", "side_effects": ["...", "..."]}]}. '
             "Only list side effects. Do not give dosage advice. Keep language simple and patient-friendly. "
             "If you cannot read the image clearly, return an empty medicines array."
         )
 
-        image_part = {"mime_type": "image/jpeg", "data": image_bytes}
-        response = vision_model.generate_content([prompt, image_part])
+        completion = local_client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{raw_b64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            response_format={"type": "json_object"}
+        )
 
-        # Try to parse JSON from the response
-        import json as _json
-        text = response.text.strip()
-        # Extract JSON block if wrapped in markdown
-        json_match = _re.search(r'\{[\s\S]*\}', text)
-        if json_match:
-            result = _json.loads(json_match.group())
-        else:
-            result = {"medicines": []}
-
+        text = completion.choices[0].message.content.strip()
+        # Parse JSON
+        result = _json.loads(text)
         return result
 
     except Exception as e:
         logger.error(f"Prescription Scan Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI scan failed: {str(e)}")
+
+
+# --- PATIENT PROFILE ENDPOINTS ---
+
+@app.get("/patients/{patient_id}")
+async def get_patient_profile(patient_id: str):
+    """
+    Retrieves patient's profile details including their assigned doctor's information.
+    """
+    try:
+        # Perform query joining doctor details
+        profile = execute_query(
+            """
+            SELECT p.id, p.email, p.first_name, p.last_name, p.age, p.phone_number, p.address, p.avatar_url, p.doctor_id,
+                   d.first_name as doctor_first_name, d.last_name as doctor_last_name, d.email as doctor_email, d.doctor_code
+            FROM patients p
+            LEFT JOIN doctors d ON p.doctor_id = d.id
+            WHERE p.id = %s
+            """,
+            (patient_id,),
+            fetch="one"
+        )
+        if not profile:
+            raise HTTPException(status_code=404, detail="Patient profile not found.")
+        
+        # Serialize fields for consistency
+        profile["id"] = str(profile["id"])
+        profile["doctor_id"] = str(profile["doctor_id"]) if profile.get("doctor_id") else None
+        profile["full_name"] = f"{profile.get('first_name') or ''} {profile.get('last_name') or ''}".strip()
+        if profile.get("doctor_first_name") or profile.get("doctor_last_name"):
+            profile["doctor_name"] = f"Dr. {profile.get('doctor_first_name') or ''} {profile.get('doctor_last_name') or ''}".strip()
+        else:
+            profile["doctor_name"] = "No Doctor Assigned"
+            
+        return profile
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Fetch Patient Profile Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not retrieve patient profile.")
+
+@app.put("/patients/{patient_id}")
+async def update_patient_profile(patient_id: str, profile_update: PatientProfileUpdate):
+    """
+    Updates the patient's editable profile information.
+    """
+    try:
+        res = execute_query(
+            """
+            UPDATE patients
+            SET first_name = %s, last_name = %s, phone_number = %s, age = %s, address = %s, avatar_url = %s
+            WHERE id = %s
+            RETURNING *
+            """,
+            (
+                profile_update.first_name,
+                profile_update.last_name,
+                profile_update.phone_number,
+                profile_update.age,
+                profile_update.address,
+                profile_update.avatar_url,
+                patient_id
+            ),
+            fetch="one"
+        )
+        if not res:
+            raise HTTPException(status_code=404, detail="Patient profile not found.")
+            
+        # Serialize returned fields
+        res["id"] = str(res["id"])
+        res["doctor_id"] = str(res["doctor_id"]) if res.get("doctor_id") else None
+        res["full_name"] = f"{res.get('first_name') or ''} {res.get('last_name') or ''}".strip()
+        return {"status": "success", "message": "Profile updated", "data": res}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update Patient Profile Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update profile.")
+
+
+# --- MEDICAL REPORTS ENDPOINTS ---
+
+@app.get("/reports/patient/{patient_id}")
+async def get_patient_reports(patient_id: str):
+    """
+    Fetches all medical reports for a given patient.
+    """
+    try:
+        res = execute_query(
+            "SELECT * FROM reports WHERE patient_id = %s ORDER BY upload_date DESC",
+            (patient_id,),
+            fetch="all"
+        )
+        for row in res:
+            row["id"] = str(row["id"])
+            row["patient_id"] = str(row["patient_id"])
+            row["doctor_id"] = str(row["doctor_id"]) if row.get("doctor_id") else None
+            if row.get("upload_date"):
+                row["upload_date"] = str(row["upload_date"])
+        return res
+    except Exception as e:
+        logger.error(f"Fetch Reports Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not retrieve reports.")
+
+@app.post("/reports/save", status_code=201)
+async def save_report(report: ReportSaveRequest):
+    """
+    Saves a diagnostic medical report record using direct SQL.
+    """
+    try:
+        # Check patient
+        pat = execute_query("SELECT doctor_id FROM patients WHERE id = %s", (report.patient_id,), fetch="one")
+        if not pat:
+            raise HTTPException(status_code=404, detail="Patient not found.")
+            
+        new_id = str(uuid.uuid4())
+        res = execute_query(
+            """
+            INSERT INTO reports (id, patient_id, doctor_id, file_name, file_url, file_type)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (new_id, report.patient_id, str(pat["doctor_id"]) if pat.get("doctor_id") else None, report.file_name, report.file_url, report.file_type),
+            fetch="one"
+        )
+        if not res:
+            raise HTTPException(status_code=500, detail="Failed to save report.")
+            
+        res["id"] = str(res["id"])
+        res["patient_id"] = str(res["patient_id"])
+        res["doctor_id"] = str(res["doctor_id"]) if res.get("doctor_id") else None
+        if res.get("upload_date"):
+            res["upload_date"] = str(res["upload_date"])
+            
+        return {"status": "success", "message": "Report uploaded", "data": res}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Save Report Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.delete("/reports/{report_id}")
+async def delete_report(report_id: str):
+    """
+    Deletes a report by ID.
+    """
+    try:
+        res = execute_query("DELETE FROM reports WHERE id = %s RETURNING id", (report_id,), fetch="one")
+        if not res:
+            raise HTTPException(status_code=404, detail="Report not found.")
+        return {"status": "deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete Report Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not delete report.")
+
+
+@app.post("/patients/{patient_id}/connect-doctor")
+async def connect_doctor(patient_id: str, doctor_code: str = Body(..., embed=True)):
+    """
+    Connects a patient to a doctor using doctor code.
+    """
+    try:
+        # Find doctor
+        doc = execute_query("SELECT id, first_name, last_name FROM doctors WHERE doctor_code = %s", (doctor_code.strip().upper(),), fetch="one")
+        if not doc:
+            raise HTTPException(status_code=404, detail="Invalid Doctor Code.")
+            
+        # Update patient
+        res = execute_query("UPDATE patients SET doctor_id = %s WHERE id = %s RETURNING *", (str(doc["id"]), patient_id), fetch="one")
+        if not res:
+            raise HTTPException(status_code=404, detail="Patient profile not found.")
+            
+        doc_name = f"Dr. {doc['first_name'] or ''} {doc['last_name'] or ''}".strip()
+        return {"status": "success", "message": f"Connected to {doc_name}", "doctor_id": str(doc["id"]), "doctor_name": doc_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Connect Doctor Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to connect to doctor.")
+
+
+@app.get("/patients/{patient_id}/settings")
+async def get_patient_settings(patient_id: str):
+    try:
+        res = execute_query("SELECT alerts_enabled FROM user_settings WHERE user_id = %s", (patient_id,), fetch="one")
+        if not res:
+            # Insert default settings if not exists
+            execute_query("INSERT INTO user_settings (user_id, alerts_enabled) VALUES (%s, TRUE)", (patient_id,), fetch="none")
+            return {"alerts_enabled": True}
+        return res
+    except Exception as e:
+        logger.error(f"Get Settings Error: {str(e)}")
+        return {"alerts_enabled": True}
+
+
+@app.put("/patients/{patient_id}/settings")
+async def update_patient_settings(patient_id: str, alerts_enabled: bool = Body(..., embed=True)):
+    try:
+        execute_query(
+            """
+            INSERT INTO user_settings (user_id, alerts_enabled, updated_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (user_id) DO UPDATE SET alerts_enabled = EXCLUDED.alerts_enabled, updated_at = NOW()
+            """,
+            (patient_id, alerts_enabled),
+            fetch="none"
+        )
+        return {"status": "success", "alerts_enabled": alerts_enabled}
+    except Exception as e:
+        logger.error(f"Update Settings Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save settings.")
 
 
 # --- SYSTEM MONITORING ---
@@ -506,7 +744,7 @@ def health_check():
         "status": "operational",
         "api_version": "2.1.0",
         "timestamp": datetime.datetime.now().isoformat(),
-        "ai_status": "connected" if GEMINI_KEY else "disconnected",
+        "ai_status": "connected" if os.environ.get("GROQ_API_KEY") else "disconnected",
         "server_region": "local-main"
     }
 

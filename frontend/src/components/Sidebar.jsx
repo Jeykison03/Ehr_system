@@ -9,7 +9,8 @@ import {
   LogOut,
   Activity,
   ScanLine,
-  Bell
+  Bell,
+  User
 } from 'lucide-react';
 
 const Sidebar = ({ profile, onLogout }) => {
@@ -24,9 +25,9 @@ const Sidebar = ({ profile, onLogout }) => {
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
     { name: 'Symptoms', path: '/symptoms', icon: <Activity size={20} /> },
     { name: 'Reports', path: '/reports', icon: <FileText size={20} /> },
-    { name: 'Prescriptions', path: '/prescriptions', icon: <Pill size={20} /> },
     { name: 'Scan Prescription', path: '/prescription-scan', icon: <ScanLine size={20} /> },
     { name: 'Reminders', path: '/reminders', icon: <Bell size={20} /> },
+    { name: 'My Profile', path: '/profile', icon: <User size={20} /> },
   ];
 
   const doctorLinks = [
@@ -70,8 +71,12 @@ const Sidebar = ({ profile, onLogout }) => {
 
       <div className="sidebar-footer">
         <div className="user-info">
-          <div className="user-avatar">
-            {initials}
+          <div className="user-avatar" style={{ cursor: 'pointer' }} onClick={() => window.location.href = '/profile'}>
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="avatar" className="sidebar-avatar-img" />
+            ) : (
+              initials
+            )}
           </div>
           <div className="user-details">
             <span className="user-name">{displayName}</span>
@@ -151,6 +156,13 @@ const Sidebar = ({ profile, onLogout }) => {
           font-weight: 700;
           font-size: 0.875rem;
           flex-shrink: 0;
+          overflow: hidden;
+        }
+        .sidebar-avatar-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          border-radius: 50%;
         }
         .user-details {
           display: flex;
