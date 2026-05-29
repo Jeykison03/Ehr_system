@@ -513,11 +513,77 @@ async def scan_prescription(req: PrescriptionScanRequest):
         text = completion.choices[0].message.content.strip()
         # Parse JSON
         result = _json.loads(text)
+
+        # If patient_id is provided, automatically archive this scan in database history
+        if req.patient_id and result.get("medicines"):
+            try:
+                # Save base64 preview only if it's within a reasonable size constraint to prevent DB bloat
+                image_save = req.image_base64 if len(req.image_base64) < 500000 else "Image_Too_Large_To_Store"
+                execute_query(
+                    """
+                    INSERT INTO prescription_scans (patient_id, image_url, medicines)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (req.patient_id, image_save, _json.dumps(result)),
+                    fetch="none"
+                )
+                logger.info(f"Automatically archived AI prescription scan for patient: {req.patient_id}")
+            except Exception as sql_err:
+                logger.error(f"Failed to auto-archive scan: {str(sql_err)}")
+
         return result
 
     except Exception as e:
         logger.error(f"Prescription Scan Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI scan failed: {str(e)}")
+
+
+@app.get("/ai/scans/patient/{patient_id}")
+async def get_patient_scans(patient_id: str):
+    """
+    Fetches all saved AI prescription scans for a patient using manual SQL.
+    """
+    try:
+        res = execute_query(
+            "SELECT * FROM prescription_scans WHERE patient_id = %s ORDER BY scanned_at DESC",
+            (patient_id,),
+            fetch="all"
+        )
+        import json as _json
+        for row in res:
+            row["id"] = str(row["id"])
+            row["patient_id"] = str(row["patient_id"])
+            if row.get("scanned_at"):
+                row["scanned_at"] = str(row["scanned_at"])
+            
+            # row["medicines"] is a dict if psycopg2 parsed it, or a JSON string
+            if isinstance(row.get("medicines"), str):
+                row["medicines"] = _json.loads(row["medicines"])
+        return res
+    except Exception as e:
+        logger.error(f"Fetch Scans Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not retrieve past prescription scans.")
+
+
+@app.delete("/ai/scans/{scan_id}")
+async def delete_scan(scan_id: str):
+    """
+    Deletes an AI prescription scan from history.
+    """
+    try:
+        res = execute_query(
+            "DELETE FROM prescription_scans WHERE id = %s RETURNING id",
+            (scan_id,),
+            fetch="one"
+        )
+        if not res:
+            raise HTTPException(status_code=404, detail="Scan not found.")
+        return {"status": "deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete Scan Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not delete scan record.")
 
 
 # --- PATIENT PROFILE ENDPOINTS ---

@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { ScanLine, Upload, X, AlertCircle, Pill, CheckCircle, ChevronDown, ChevronUp, Loader } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { ScanLine, Upload, X, AlertCircle, Pill, CheckCircle, ChevronDown, ChevronUp, Loader, History, Trash2 } from 'lucide-react';
 import { API_BASE } from '../lib/config';
 
 const PrescriptionScan = () => {
@@ -10,7 +10,33 @@ const PrescriptionScan = () => {
   const [result, setResult] = useState(null);  // { medicines: [{name, description, side_effects}] }
   const [error, setError] = useState('');
   const [expandedIdx, setExpandedIdx] = useState(null);
+  const [pastScans, setPastScans] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [activeTab, setActiveTab] = useState('current'); // 'current' or 'history'
   const fileInputRef = useRef(null);
+
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchPastScans();
+    }
+  }, []);
+
+  const fetchPastScans = async () => {
+    setLoadingHistory(true);
+    try {
+      const res = await fetch(`${API_BASE}/ai/scans/patient/${user.id}`);
+      const data = await res.json();
+      if (res.ok) {
+        setPastScans(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('Failed to load past scans:', e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   const handleFile = (file) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -43,17 +69,40 @@ const PrescriptionScan = () => {
       const res = await fetch(`${API_BASE}/ai/scan-prescription`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: image })
+        body: JSON.stringify({ image_base64: image, patient_id: user.id })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Analysis failed.');
       setResult(data);
       setExpandedIdx(0);
+      setActiveTab('current');
+      fetchPastScans();
     } catch (e) {
       setError(e.message || 'Could not analyze image. Try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const deleteScan = async (e, scanId) => {
+    e.stopPropagation();
+    if (!window.confirm('Are you sure you want to delete this scan from your history?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/ai/scans/${scanId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setPastScans(prev => prev.filter(s => s.id !== scanId));
+      }
+    } catch (err) {
+      console.error('Failed to delete scan:', err);
+    }
+  };
+
+  const loadPastScan = (scan) => {
+    setResult(scan.medicines);
+    setExpandedIdx(0);
+    setActiveTab('current');
   };
 
   const clearAll = () => {
@@ -146,68 +195,127 @@ const PrescriptionScan = () => {
 
         {/* RIGHT: RESULTS PANEL */}
         <div className="ps-panel ps-results-panel">
-          <h3 className="ps-panel-title">💊 Medicine Analysis Results</h3>
-
-          {!result && !loading && (
-            <div className="ps-placeholder">
-              <ScanLine size={48} color="#e2e8f0" />
-              <p>Upload a prescription and click <strong>Analyze</strong> to see results here.</p>
+          <div className="ps-panel-header-row">
+            <h3 className="ps-panel-title">📊 Analysis & Vault History</h3>
+            <div className="ps-tabs">
+              <button 
+                className={`ps-tab-btn ${activeTab === 'current' ? 'active' : ''}`}
+                onClick={() => setActiveTab('current')}
+              >
+                <Pill size={14} />
+                <span>Active Scan</span>
+              </button>
+              <button 
+                className={`ps-tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('history'); fetchPastScans(); }}
+              >
+                <History size={14} />
+                <span>Scan History ({pastScans.length})</span>
+              </button>
             </div>
-          )}
+          </div>
 
-          {result && result.medicines?.length === 0 && (
-            <div className="ps-no-medicines">
-              <AlertCircle size={32} color="#f59e0b" />
-              <p>No medicines could be identified. Try a clearer photo with better lighting.</p>
-            </div>
-          )}
+          {activeTab === 'current' ? (
+            <>
+              {!result && !loading && (
+                <div className="ps-placeholder">
+                  <ScanLine size={48} color="#e2e8f0" />
+                  <p>Upload a prescription and click <strong>Analyze</strong> to see results here.</p>
+                </div>
+              )}
 
-          {result && result.medicines?.length > 0 && (
-            <div className="ps-medicines-list">
-              <div className="ps-found-header">
-                <CheckCircle size={18} color="#10b981" />
-                <span>{result.medicines.length} medicine{result.medicines.length !== 1 ? 's' : ''} identified</span>
-              </div>
+              {result && result.medicines?.length === 0 && (
+                <div className="ps-no-medicines">
+                  <AlertCircle size={32} color="#f59e0b" />
+                  <p>No medicines could be identified. Try a clearer photo with better lighting.</p>
+                </div>
+              )}
 
-              {result.medicines.map((med, i) => (
-                <div key={i} className="ps-med-card">
-                  <div className="ps-med-header" onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}>
-                    <div className="ps-med-left">
-                      <div className="ps-med-icon-wrap"><Pill size={18} /></div>
-                      <div>
-                        <div className="ps-med-name">{med.name}</div>
-                        <div className="ps-med-desc">{med.description}</div>
-                      </div>
-                    </div>
-                    <div className="ps-med-toggle">
-                      <span className="ps-se-count">{med.side_effects?.length || 0} side effects</span>
-                      {expandedIdx === i ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                    </div>
+              {result && result.medicines?.length > 0 && (
+                <div className="ps-medicines-list">
+                  <div className="ps-found-header">
+                    <CheckCircle size={18} color="#10b981" />
+                    <span>{result.medicines.length} medicine{result.medicines.length !== 1 ? 's' : ''} identified</span>
                   </div>
 
-                  {expandedIdx === i && (
-                    <div className="ps-med-body">
-                      <p className="ps-se-title">Known Side Effects:</p>
-                      {med.side_effects?.length > 0 ? (
-                        <ul className="ps-se-list">
-                          {med.side_effects.map((se, j) => (
-                            <li key={j} className="ps-se-item">
-                              <span className="ps-se-dot" />
-                              {se}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="ps-se-none">No side effects listed.</p>
+                  {result.medicines.map((med, i) => (
+                    <div key={i} className="ps-med-card">
+                      <div className="ps-med-header" onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}>
+                        <div className="ps-med-left">
+                          <div className="ps-med-icon-wrap"><Pill size={18} /></div>
+                          <div>
+                            <div className="ps-med-name">{med.name}</div>
+                            <div className="ps-med-desc">{med.description}</div>
+                          </div>
+                        </div>
+                        <div className="ps-med-toggle">
+                          <span className="ps-se-count">{med.side_effects?.length || 0} side effects</span>
+                          {expandedIdx === i ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </div>
+                      </div>
+
+                      {expandedIdx === i && (
+                        <div className="ps-med-body">
+                          <p className="ps-se-title">Known Side Effects:</p>
+                          {med.side_effects?.length > 0 ? (
+                            <ul className="ps-se-list">
+                              {med.side_effects.map((se, j) => (
+                                <li key={j} className="ps-se-item">
+                                  <span className="ps-se-dot" />
+                                  {se}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="ps-se-none">No side effects listed.</p>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              ))}
+                  ))}
 
-              <div className="ps-disclaimer">
-                ⚠️ This analysis is AI-generated for informational purposes only. Always consult your doctor or pharmacist for medical advice.
-              </div>
+                  <div className="ps-disclaimer">
+                    ⚠️ This analysis is AI-generated for informational purposes only. Always consult your doctor or pharmacist for medical advice.
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="ps-history-tab">
+              {loadingHistory ? (
+                <div className="ps-loader-wrap">
+                  <Loader size={28} className="ps-spin" />
+                  <p>Loading prescription vault...</p>
+                </div>
+              ) : pastScans.length === 0 ? (
+                <div className="ps-placeholder">
+                  <History size={48} color="#e2e8f0" />
+                  <p>No scanned prescriptions saved in your database history yet.</p>
+                </div>
+              ) : (
+                <div className="ps-history-list">
+                  {pastScans.map((scan) => (
+                    <div key={scan.id} className="ps-history-card" onClick={() => loadPastScan(scan)}>
+                      <div className="ps-history-card-left">
+                        <div className="ps-history-icon-circle">
+                          <ScanLine size={16} color="#7c3aed" />
+                        </div>
+                        <div className="ps-history-details">
+                          <div className="ps-history-title">
+                            Prescription ({scan.medicines?.medicines?.length || 0} Medicine{scan.medicines?.medicines?.length !== 1 ? 's' : ''})
+                          </div>
+                          <div className="ps-history-date">
+                            {new Date(scan.scanned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      </div>
+                      <button className="ps-history-delete-btn" onClick={(e) => deleteScan(e, scan.id)} title="Delete scan record">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -344,6 +452,55 @@ const PrescriptionScan = () => {
           font-size: 0.78rem; color: #92400e; background: #fffbeb;
           border: 1px solid #fde68a; padding: 0.75rem 1rem; border-radius: 0.625rem; line-height: 1.5;
         }
+
+        /* TABS AND HISTORY VAULT */
+        .ps-panel-header-row {
+          display: flex; justify-content: space-between; align-items: center;
+          border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem; margin-bottom: 0.25rem;
+          flex-wrap: wrap; gap: 0.75rem;
+        }
+        .ps-tabs {
+          display: flex; gap: 0.25rem; background: #f1f5f9; padding: 0.25rem; border-radius: 0.5rem;
+        }
+        .ps-tab-btn {
+          display: flex; align-items: center; gap: 0.35rem; border: none;
+          padding: 0.4rem 0.8rem; border-radius: 0.375rem; font-size: 0.78rem;
+          font-weight: 600; cursor: pointer; color: #64748b; background: transparent;
+          transition: all 0.15s;
+        }
+        .ps-tab-btn:hover { color: #0f172a; }
+        .ps-tab-btn.active {
+          background: white; color: #7c3aed; box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+
+        .ps-history-tab { display: flex; flex-direction: column; gap: 0.75rem; }
+        .ps-loader-wrap {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          padding: 3rem; color: #94a3b8; font-size: 0.875rem; gap: 0.75rem;
+        }
+        .ps-history-list { display: flex; flex-direction: column; gap: 0.65rem; }
+        
+        .ps-history-card {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 0.875rem 1rem; border: 1.5px solid #f1f5f9; border-radius: 0.75rem;
+          cursor: pointer; transition: all 0.15s; background: #fafafa;
+        }
+        .ps-history-card:hover { border-color: #ddd6fe; background: #f5f3ff; }
+        .ps-history-card-left { display: flex; align-items: center; gap: 0.75rem; }
+        .ps-history-icon-circle {
+          width: 32px; height: 32px; border-radius: 50%; background: #f5f3ff;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .ps-history-details { display: flex; flex-direction: column; gap: 0.15rem; }
+        .ps-history-title { font-size: 0.85rem; font-weight: 700; color: #0f172a; }
+        .ps-history-date { font-size: 0.72rem; color: #94a3b8; }
+        
+        .ps-history-delete-btn {
+          border: none; background: transparent; color: #cbd5e1; cursor: pointer;
+          padding: 0.35rem; border-radius: 0.375rem; display: flex; align-items: center;
+          justify-content: center; transition: all 0.15s;
+        }
+        .ps-history-delete-btn:hover { color: #ef4444; background: #fef2f2; }
       `}</style>
     </div>
   );

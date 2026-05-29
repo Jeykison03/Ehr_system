@@ -53,6 +53,7 @@ class PrescriptionScanRequest(BaseModel):
     Model for AI prescription image analysis.
     """
     image_base64: str  # base64-encoded image string (data URI or raw base64)
+    patient_id: Optional[str] = None  # optional patient ID to log scan history
 
 class PatientProfileUpdate(BaseModel):
     first_name: str
