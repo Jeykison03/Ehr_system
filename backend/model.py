@@ -63,9 +63,24 @@ class PatientProfileUpdate(BaseModel):
     address: Optional[str] = None
     avatar_url: Optional[str] = None
 
+class DoctorProfileUpdate(BaseModel):
+    first_name: str
+    last_name: str
+    phone_number: str
+    age: int
+    avatar_url: Optional[str] = None
+
 class ReportSaveRequest(BaseModel):
     patient_id: str
     file_name: str
     file_url: str
     file_type: str
 
+class AlertCreate(BaseModel):
+    patient_id: str
+    symptom_id: Optional[str] = None
+    message: str  # short message from patient to doctor
+    severity: Optional[int] = None
+
+class AlertComment(BaseModel):
+    comment: str  # doctor's reply text

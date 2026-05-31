@@ -37,7 +37,8 @@ const Profile = () => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/patients/${sessionUser.id}`);
+      const endpoint = sessionUser.role === 'doctor' ? 'doctors' : 'patients';
+      const res = await fetch(`${API_BASE}/${endpoint}/${sessionUser.id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Could not load profile');
       setProfile(data);
@@ -74,17 +75,26 @@ const Profile = () => {
     setError('');
     setSuccess(false);
     try {
-      const res = await fetch(`${API_BASE}/patients/${sessionUser.id}`, {
+      const endpoint = sessionUser.role === 'doctor' ? 'doctors' : 'patients';
+      const payload = sessionUser.role === 'doctor' ? {
+        first_name: form.first_name,
+        last_name: form.last_name,
+        phone_number: form.phone_number,
+        age: parseInt(form.age) || 0,
+        avatar_url: form.avatar_url,
+      } : {
+        first_name: form.first_name,
+        last_name: form.last_name,
+        phone_number: form.phone_number,
+        age: parseInt(form.age) || 0,
+        address: form.address,
+        avatar_url: form.avatar_url,
+      };
+
+      const res = await fetch(`${API_BASE}/${endpoint}/${sessionUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          first_name: form.first_name,
-          last_name: form.last_name,
-          phone_number: form.phone_number,
-          age: parseInt(form.age) || 0,
-          address: form.address,
-          avatar_url: form.avatar_url,
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Failed to update profile');
@@ -97,7 +107,7 @@ const Profile = () => {
         full_name: data.data.full_name,
         phone_number: data.data.phone_number,
         age: data.data.age,
-        address: data.data.address,
+        address: data.data.address || '',
         avatar_url: data.data.avatar_url,
       };
       localStorage.setItem('user', JSON.stringify(updatedUser));
@@ -198,8 +208,8 @@ const Profile = () => {
                 {uploadingPhoto && <div className="avatar-spinner"><Loader size={16} className="prof-spin" /></div>}
               </div>
               <input id="avatar-input" type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />
-              <h3>{profile?.full_name || 'Patient Profile'}</h3>
-              <span className="profile-role-badge">Patient Account</span>
+              <h3>{profile?.full_name || (sessionUser.role === 'doctor' ? 'Doctor Profile' : 'Patient Profile')}</h3>
+              <span className="profile-role-badge">{sessionUser.role === 'doctor' ? 'Medical Professional' : 'Patient Account'}</span>
             </div>
 
             {/* FORM FIELDS */}
@@ -245,15 +255,17 @@ const Profile = () => {
                 />
               </div>
 
-              <div className="form-group full-width">
-                <label><MapPin size={14} /> Home Address</label>
-                <input
-                  type="text"
-                  placeholder="Street, Apt, City, Zip Code..."
-                  value={form.address}
-                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                />
-              </div>
+              {sessionUser.role !== 'doctor' && (
+                <div className="form-group full-width">
+                  <label><MapPin size={14} /> Home Address</label>
+                  <input
+                    type="text"
+                    placeholder="Street, Apt, City, Zip Code..."
+                    value={form.address}
+                    onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="form-actions">
@@ -266,61 +278,96 @@ const Profile = () => {
 
         {/* RIGHT CLINICAL CARD */}
         <div className="prof-right">
-          <div className="glass-panel doctor-info-card">
-            <div className="dic-header">
-              <Heart size={22} color="#ec4899" />
-              <h3>Assigned Doctor</h3>
-            </div>
-            
-            <div className="doctor-badge-section">
-              <div className="doctor-avatar">
-                {profile?.doctor_name?.replace('Dr. ', '').charAt(0) || 'D'}
+          {sessionUser.role === 'doctor' ? (
+            <div className="glass-panel doctor-info-card">
+              <div className="dic-header">
+                <Heart size={22} color="#2563eb" />
+                <h3>Professional Info</h3>
               </div>
-              <div>
-                <h4 className="doctor-name">{profile?.doctor_name || 'No Doctor Assigned'}</h4>
-                <p className="doctor-specialty">Primary Care Physician</p>
+              
+              <div className="doctor-badge-section">
+                <div className="doctor-avatar">
+                  {form.first_name ? form.first_name.charAt(0).toUpperCase() : 'D'}
+                </div>
+                <div>
+                  <h4 className="doctor-name">Dr. {form.first_name} {form.last_name}</h4>
+                  <p className="doctor-specialty">Registered Doctor / Provider</p>
+                </div>
               </div>
-            </div>
 
-            <div className="doctor-details-list">
-              <div className="doc-detail-row">
-                <span className="dd-label">Doctor ID / Code</span>
-                <span className="dd-value code">{profile?.doctor_code || '—'}</span>
+              <div className="doctor-details-list">
+                <div className="doc-detail-row">
+                  <span className="dd-label">Doctor Code</span>
+                  <span className="dd-value code">{profile?.doctor_code || '—'}</span>
+                </div>
+                <div className="doc-detail-row">
+                  <span className="dd-label">Contact Email</span>
+                  <span className="dd-value">{profile?.email || '—'}</span>
+                </div>
               </div>
-              <div className="doc-detail-row">
-                <span className="dd-label">Contact Email</span>
-                <span className="dd-value">{profile?.doctor_email || '—'}</span>
+
+              <div className="dic-footer">
+                <Shield size={16} color="#10b981" />
+                <span>You are logged into a secure clinical terminal. Patients connected to your Doctor Code will share their medical history with you.</span>
               </div>
             </div>
-
-            {/* ASSIGNED DOCTOR EDIT OPTION */}
-            <div className="change-doctor-section">
-              <div className="cds-header">
-                <Stethoscope size={16} color="#2563eb" />
-                <h4>Change Assigned Doctor</h4>
+          ) : (
+            <div className="glass-panel doctor-info-card">
+              <div className="dic-header">
+                <Heart size={22} color="#ec4899" />
+                <h3>Assigned Doctor</h3>
               </div>
-              {doctorError && <div className="prof-alert error mini"><AlertCircle size={12} /> {doctorError}</div>}
-              {doctorSuccess && <div className="prof-alert success mini"><CheckCircle size={12} /> {doctorSuccess}</div>}
+              
+              <div className="doctor-badge-section">
+                <div className="doctor-avatar">
+                  {profile?.doctor_name?.replace('Dr. ', '').charAt(0) || 'D'}
+                </div>
+                <div>
+                  <h4 className="doctor-name">{profile?.doctor_name || 'No Doctor Assigned'}</h4>
+                  <p className="doctor-specialty">Primary Care Physician</p>
+                </div>
+              </div>
 
-              <form onSubmit={handleChangeDoctor} className="doctor-change-form">
-                <input
-                  type="text"
-                  required
-                  placeholder="Enter new Doctor Code..."
-                  value={newDoctorCode}
-                  onChange={e => setNewDoctorCode(e.target.value)}
-                />
-                <button type="submit" className="btn-change-doctor" disabled={updatingDoctor}>
-                  {updatingDoctor ? '...' : 'Change'}
-                </button>
-              </form>
-            </div>
+              <div className="doctor-details-list">
+                <div className="doc-detail-row">
+                  <span className="dd-label">Doctor ID / Code</span>
+                  <span className="dd-value code">{profile?.doctor_code || '—'}</span>
+                </div>
+                <div className="doc-detail-row">
+                  <span className="dd-label">Contact Email</span>
+                  <span className="dd-value">{profile?.doctor_email || '—'}</span>
+                </div>
+              </div>
 
-            <div className="dic-footer">
-              <Shield size={16} color="#10b981" />
-              <span>Your medical records are fully encrypted and only visible to you and your assigned provider.</span>
+              {/* ASSIGNED DOCTOR EDIT OPTION */}
+              <div className="change-doctor-section">
+                <div className="cds-header">
+                  <Stethoscope size={16} color="#2563eb" />
+                  <h4>Change Assigned Doctor</h4>
+                </div>
+                {doctorError && <div className="prof-alert error mini"><AlertCircle size={12} /> {doctorError}</div>}
+                {doctorSuccess && <div className="prof-alert success mini"><CheckCircle size={12} /> {doctorSuccess}</div>}
+
+                <form onSubmit={handleChangeDoctor} className="doctor-change-form">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter new Doctor Code..."
+                    value={newDoctorCode}
+                    onChange={e => setNewDoctorCode(e.target.value)}
+                  />
+                  <button type="submit" className="btn-change-doctor" disabled={updatingDoctor}>
+                    {updatingDoctor ? '...' : 'Change'}
+                  </button>
+                </form>
+              </div>
+
+              <div className="dic-footer">
+                <Shield size={16} color="#10b981" />
+                <span>Your medical records are fully encrypted and only visible to you and your assigned provider.</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

@@ -22,7 +22,8 @@ const Settings = () => {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const profRes = await fetch(`${API_BASE}/patients/${user.id}`);
+      const endpoint = user.role === 'doctor' ? 'doctors' : 'patients';
+      const profRes = await fetch(`${API_BASE}/${endpoint}/${user.id}`);
       const profData = await profRes.json();
       if (profRes.ok) {
         setProfile(profData);

@@ -29,6 +29,9 @@ const Symptoms = () => {
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editId, setEditId] = useState(null); // symptom id being edited
+  const [alertingId, setAlertingId] = useState(null); // symptom id being alerted
+  const [alertSent, setAlertSent] = useState(false);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -84,8 +87,11 @@ const Symptoms = () => {
         image_url: form.imagePreview || null,
       };
 
-      const res = await fetch(`${API_BASE}/symptoms/save`, {
-        method: 'POST',
+      const url    = editId ? `${API_BASE}/symptoms/${editId}` : `${API_BASE}/symptoms/save`;
+      const method = editId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
@@ -98,6 +104,7 @@ const Symptoms = () => {
       setTimeout(() => {
         setSubmitSuccess(false);
         setShowForm(false);
+        setEditId(null);
         setForm(emptyForm);
         fetchSymptoms();
       }, 1500);
@@ -106,6 +113,52 @@ const Symptoms = () => {
       setError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleEdit = (s) => {
+    // Pre-fill form with existing symptom data
+    const parts = (s.duration || '').split(' ');
+    setEditId(s.id);
+    setForm({
+      description: s.description || '',
+      occurrence_date: s.occurrence_date || new Date().toISOString().split('T')[0],
+      severity: s.severity || 5,
+      duration: parts[0] || '',
+      durationUnit: parts[1] || 'hours',
+      location: s.location || '',
+      blood_sugar: s.blood_sugar || '',
+      notes: s.notes || '',
+      meal_info: s.meal_info || '',
+      medication_taken: s.medication_taken || '',
+      imagePreview: s.image_url || null,
+    });
+    setShowForm(true);
+    setError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleAlert = async (s) => {
+    if (alertingId) return;
+    setAlertingId(s.id);
+    try {
+      const res = await fetch(`${API_BASE}/alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patient_id: user.id,
+          symptom_id: s.id,
+          message: `Patient reported: ${s.description}`,
+          severity: s.severity,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setAlertSent(true);
+      setTimeout(() => setAlertSent(false), 3000);
+    } catch (e) {
+      alert('Failed to send alert. Please try again.');
+    } finally {
+      setAlertingId(null);
     }
   };
 
@@ -129,13 +182,20 @@ const Symptoms = () => {
       {/* DECORATIVE BLURRED IMAGE BACKDROP */}
       <div className="sym-glow-bg" />
 
+      {/* ALERT SENT TOAST */}
+      {alertSent && (
+        <div className="sym-alert-toast">
+          🚨 Alert sent to your doctor successfully!
+        </div>
+      )}
+
       {/* PAGE HEADER */}
       <div className="sym-header sym-header-glass animate-fade-in">
         <div>
           <h1 className="sym-title">Symptom Journal</h1>
           <p className="sym-sub">Log daily check-ins to monitor sugar levels, meals, and general clinical wellness.</p>
         </div>
-        <button className="sym-add-btn" onClick={() => { setShowForm(true); setError(''); }}>
+        <button className="sym-add-btn" onClick={() => { setShowForm(true); setEditId(null); setForm(emptyForm); setError(''); }}>
           <Plus size={18} /> Log Check-In
         </button>
       </div>
@@ -144,8 +204,8 @@ const Symptoms = () => {
       {showForm && (
         <div className="sym-form-card glass-panel animate-slide-down">
           <div className="sfc-header">
-            <h2 className="sfc-title">🩺 New Health Check-In</h2>
-            <button className="sfc-close" onClick={() => { setShowForm(false); setForm(emptyForm); setError(''); }}>
+            <h2 className="sfc-title">{editId ? '✏️ Edit Health Check-In' : '🩺 New Health Check-In'}</h2>
+            <button className="sfc-close" onClick={() => { setShowForm(false); setForm(emptyForm); setEditId(null); setError(''); }}>
               <X size={20} />
             </button>
           </div>
@@ -289,11 +349,11 @@ const Symptoms = () => {
 
               {/* FORM ACTIONS */}
               <div className="form-actions">
-                <button type="button" className="btn-cancel" onClick={() => { setShowForm(false); setForm(emptyForm); setError(''); }}>
+                <button type="button" className="btn-cancel" onClick={() => { setShowForm(false); setForm(emptyForm); setEditId(null); setError(''); }}>
                   Cancel
                 </button>
                 <button type="submit" className="btn-submit" disabled={submitting}>
-                  {submitting ? <><Loader size={16} className="sym-spin" /> Registering...</> : '✓ Save Check-In'}
+                  {submitting ? <><Loader size={16} className="sym-spin" /> {editId ? 'Updating...' : 'Registering...'}</> : editId ? '✓ Update Check-In' : '✓ Save Check-In'}
                 </button>
               </div>
 
@@ -339,6 +399,17 @@ const Symptoms = () => {
                       <span className="sic-sev-pill" style={{ background: sevBg, color: sevTxt, border: `1px solid ${getSevBorder(s.severity || 5)}` }}>
                         {getSevLabel(s.severity || 5)} · {s.severity}/10
                       </span>
+                      <button className="sic-edit" title="Edit" onClick={(e) => { e.stopPropagation(); handleEdit(s); }}>
+                        ✏️
+                      </button>
+                      <button
+                        className="sic-alert-btn"
+                        title="Alert Doctor"
+                        disabled={alertingId === s.id}
+                        onClick={(e) => { e.stopPropagation(); handleAlert(s); }}
+                      >
+                        🚨
+                      </button>
                       <button className="sic-delete" onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}>
                         <Trash2 size={14} />
                       </button>
@@ -566,6 +637,33 @@ const Symptoms = () => {
         .animate-slide-down { animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideDown { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        .sic-edit {
+          background: none; border: none; cursor: pointer;
+          padding: 0.25rem 0.35rem; border-radius: 0.35rem;
+          font-size: 0.9rem; transition: all 0.15s; line-height: 1;
+        }
+        .sic-edit:hover { background: #eff6ff; transform: scale(1.15); }
+
+        .sic-alert-btn {
+          background: none; border: none; cursor: pointer;
+          padding: 0.25rem 0.35rem; border-radius: 0.35rem;
+          font-size: 0.9rem; transition: all 0.15s; line-height: 1;
+        }
+        .sic-alert-btn:hover:not(:disabled) { background: #fff1f2; transform: scale(1.15); }
+        .sic-alert-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .sym-alert-toast {
+          position: fixed; top: 1.5rem; left: 50%; transform: translateX(-50%);
+          background: linear-gradient(135deg, #ef4444, #dc2626);
+          color: white; font-weight: 700; font-size: 0.875rem;
+          padding: 0.75rem 1.5rem; border-radius: 999px;
+          box-shadow: 0 4px 20px rgba(239,68,68,0.35);
+          z-index: 9999;
+          animation: toastIn 0.35s cubic-bezier(0.16,1,0.3,1), toastOut 0.3s ease 2.7s forwards;
+        }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(-16px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        @keyframes toastOut { to { opacity: 0; transform: translateX(-50%) translateY(-8px); } }
       `}</style>
     </div>
   );

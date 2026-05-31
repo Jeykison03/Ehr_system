@@ -10,7 +10,7 @@ import uuid
 # pyrefly: ignore [missing-import]
 import bcrypt
 from database import execute_query
-from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate, PrescriptionScanRequest, PatientProfileUpdate, ReportSaveRequest
+from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate, PrescriptionScanRequest, PatientProfileUpdate, DoctorProfileUpdate, ReportSaveRequest, AlertCreate, AlertComment
 from groq import Groq
 
 # --- LOGGING CONFIGURATION ---
@@ -664,6 +664,80 @@ async def update_patient_profile(patient_id: str, profile_update: PatientProfile
         raise HTTPException(status_code=500, detail="Failed to update profile.")
 
 
+
+# --- DOCTOR PROFILE ENDPOINTS ---
+
+@app.get("/doctors/{doctor_id}")
+async def get_doctor_profile(doctor_id: str):
+    """
+    Retrieves doctor's profile details.
+    """
+    try:
+        # Automatically ensure avatar_url column exists in doctors table
+        try:
+            execute_query("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS avatar_url TEXT", fetch="none")
+        except Exception:
+            pass
+
+        profile = execute_query(
+            """
+            SELECT id, email, first_name, last_name, age, phone_number, doctor_code, avatar_url
+            FROM doctors
+            WHERE id = %s
+            """,
+            (doctor_id,),
+            fetch="one"
+        )
+        if not profile:
+            raise HTTPException(status_code=404, detail="Doctor profile not found.")
+        
+        # Serialize fields for consistency
+        profile["id"] = str(profile["id"])
+        profile["full_name"] = f"Dr. {profile.get('first_name') or ''} {profile.get('last_name') or ''}".strip()
+        return profile
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Fetch Doctor Profile Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not retrieve doctor profile.")
+
+@app.put("/doctors/{doctor_id}")
+async def update_doctor_profile(doctor_id: str, profile_update: DoctorProfileUpdate):
+    """
+    Updates the doctor's editable profile information.
+    """
+    try:
+        res = execute_query(
+            """
+            UPDATE doctors
+            SET first_name = %s, last_name = %s, phone_number = %s, age = %s, avatar_url = %s
+            WHERE id = %s
+            RETURNING *
+            """,
+            (
+                profile_update.first_name,
+                profile_update.last_name,
+                profile_update.phone_number,
+                profile_update.age,
+                profile_update.avatar_url,
+                doctor_id
+            ),
+            fetch="one"
+        )
+        if not res:
+            raise HTTPException(status_code=404, detail="Doctor profile not found.")
+            
+        # Serialize returned fields
+        res["id"] = str(res["id"])
+        res["full_name"] = f"Dr. {res.get('first_name') or ''} {res.get('last_name') or ''}".strip()
+        return {"status": "success", "message": "Profile updated", "data": res}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update Doctor Profile Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update profile.")
+
+
 # --- MEDICAL REPORTS ENDPOINTS ---
 
 @app.get("/reports/patient/{patient_id}")
@@ -797,6 +871,185 @@ async def update_patient_settings(patient_id: str, alerts_enabled: bool = Body(.
     except Exception as e:
         logger.error(f"Update Settings Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to save settings.")
+
+
+# --- ALERTS / DOCTOR COMMENT SYSTEM ---
+
+def ensure_alerts_table():
+    """Auto-creates the alerts table if it doesn't exist yet."""
+    try:
+        execute_query(
+            """
+            CREATE TABLE IF NOT EXISTS alerts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                patient_id UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+                symptom_id UUID REFERENCES symptoms(id) ON DELETE SET NULL,
+                message TEXT NOT NULL,
+                severity INTEGER,
+                doctor_comment TEXT,
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                replied_at TIMESTAMP
+            )
+            """,
+            fetch="none"
+        )
+    except Exception as e:
+        logger.warning(f"Could not ensure alerts table: {str(e)}")
+
+ensure_alerts_table()
+
+@app.post("/alerts", status_code=201)
+async def create_alert(alert: AlertCreate):
+    """Patient sends an alert (with optional linked symptom) to their doctor."""
+    try:
+        ensure_alerts_table()
+        new_id = str(uuid.uuid4())
+        data = execute_query(
+            """
+            INSERT INTO alerts (id, patient_id, symptom_id, message, severity)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (new_id, alert.patient_id, alert.symptom_id, alert.message, alert.severity),
+            fetch="one"
+        )
+        if not data:
+            raise HTTPException(status_code=500, detail="Failed to create alert.")
+        data["id"] = str(data["id"])
+        data["patient_id"] = str(data["patient_id"])
+        if data.get("symptom_id"): data["symptom_id"] = str(data["symptom_id"])
+        if data.get("created_at"): data["created_at"] = str(data["created_at"])
+        return {"status": "success", "data": data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Create Alert Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Alert error: {str(e)}")
+
+
+@app.get("/alerts/doctor/{doctor_id}")
+async def get_doctor_alerts(doctor_id: str):
+    """Returns all alerts for patients under a given doctor, newest first."""
+    try:
+        ensure_alerts_table()
+        res = execute_query(
+            """
+            SELECT a.*, p.first_name, p.last_name, p.email as patient_email,
+                   s.description as symptom_description
+            FROM alerts a
+            JOIN patients p ON a.patient_id = p.id
+            LEFT JOIN symptoms s ON a.symptom_id = s.id
+            WHERE p.doctor_id = %s
+            ORDER BY a.created_at DESC
+            """,
+            (doctor_id,),
+            fetch="all"
+        )
+        for row in res:
+            row["id"] = str(row["id"])
+            row["patient_id"] = str(row["patient_id"])
+            if row.get("symptom_id"): row["symptom_id"] = str(row["symptom_id"])
+            if row.get("created_at"): row["created_at"] = str(row["created_at"])
+            if row.get("replied_at"): row["replied_at"] = str(row["replied_at"])
+            row["patient_name"] = f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip()
+        return res
+    except Exception as e:
+        logger.error(f"Get Doctor Alerts Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not retrieve alerts.")
+
+
+@app.put("/alerts/{alert_id}/comment")
+async def reply_to_alert(alert_id: str, body: AlertComment):
+    """Doctor replies with a comment to a patient's alert."""
+    try:
+        ensure_alerts_table()
+        res = execute_query(
+            """
+            UPDATE alerts
+            SET doctor_comment = %s, is_read = TRUE, replied_at = NOW()
+            WHERE id = %s
+            RETURNING *
+            """,
+            (body.comment, alert_id),
+            fetch="one"
+        )
+        if not res:
+            raise HTTPException(status_code=404, detail="Alert not found.")
+        res["id"] = str(res["id"])
+        res["patient_id"] = str(res["patient_id"])
+        if res.get("symptom_id"): res["symptom_id"] = str(res["symptom_id"])
+        if res.get("created_at"): res["created_at"] = str(res["created_at"])
+        if res.get("replied_at"): res["replied_at"] = str(res["replied_at"])
+        return {"status": "success", "data": res}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reply Alert Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Comment error: {str(e)}")
+
+
+@app.get("/alerts/patient/{patient_id}")
+async def get_patient_alerts(patient_id: str):
+    """Returns all alerts (with doctor comments) for a given patient."""
+    try:
+        ensure_alerts_table()
+        res = execute_query(
+            """
+            SELECT a.*, s.description as symptom_description
+            FROM alerts a
+            LEFT JOIN symptoms s ON a.symptom_id = s.id
+            WHERE a.patient_id = %s
+            ORDER BY a.created_at DESC
+            """,
+            (patient_id,),
+            fetch="all"
+        )
+        for row in res:
+            row["id"] = str(row["id"])
+            row["patient_id"] = str(row["patient_id"])
+            if row.get("symptom_id"): row["symptom_id"] = str(row["symptom_id"])
+            if row.get("created_at"): row["created_at"] = str(row["created_at"])
+            if row.get("replied_at"): row["replied_at"] = str(row["replied_at"])
+        return res
+    except Exception as e:
+        logger.error(f"Get Patient Alerts Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not retrieve alerts.")
+
+
+@app.put("/symptoms/{symptom_id}")
+async def update_symptom(symptom_id: str, symptom: SymptomCreate):
+    """Updates an existing symptom record."""
+    try:
+        res = execute_query(
+            """
+            UPDATE symptoms SET
+                description = %s, severity = %s, duration = %s, location = %s,
+                occurrence_date = %s, notes = %s, blood_sugar = %s,
+                meal_info = %s, medication_taken = %s, image_url = %s
+            WHERE id = %s
+            RETURNING *
+            """,
+            (
+                symptom.description, symptom.severity, symptom.duration, symptom.location,
+                symptom.occurrence_date, symptom.notes, symptom.blood_sugar,
+                symptom.meal_info, symptom.medication_taken, symptom.image_url,
+                symptom_id
+            ),
+            fetch="one"
+        )
+        if not res:
+            raise HTTPException(status_code=404, detail="Symptom not found.")
+        res["id"] = str(res["id"])
+        res["patient_id"] = str(res["patient_id"])
+        if res.get("occurrence_date"): res["occurrence_date"] = str(res["occurrence_date"])
+        if res.get("created_at"): res["created_at"] = str(res["created_at"])
+        return {"status": "success", "data": res}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update Symptom Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Update error: {str(e)}")
 
 
 # --- SYSTEM MONITORING ---

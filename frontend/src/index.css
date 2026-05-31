@@ -94,22 +94,29 @@ button {
 /* Layout Classes */
 .dashboard-container {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 260px 1fr;
   min-height: 100vh;
 }
 
-.sidebar {
-  background: var(--card);
-  border-right: 1px solid var(--border);
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
+.sidebar,
+.ds-sidebar {
+  /* Shared sticky behaviour for both sidebars */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .main-content {
-  padding: 2.5rem;
   overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  background: linear-gradient(135deg, #f0f6ff 0%, #f8fafc 50%, #f0f9ff 100%);
+}
+
+/* Doctor portal gets a soft indigo-tinted background */
+.main-content--doctor {
+  background: linear-gradient(135deg, #f5f3ff 0%, #faf8ff 40%, #f0f9ff 100%) !important;
 }
 
 .stats-grid {
