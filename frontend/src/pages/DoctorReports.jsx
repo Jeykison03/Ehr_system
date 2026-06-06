@@ -127,12 +127,16 @@ const DoctorReports = () => {
 
           // Send notification
           const docName = user?.first_name ? `Dr. ${user.first_name}` : 'Your doctor';
-          await supabase.from('notifications').insert([{
-            patient_id: selected.id,
-            type: 'report',
-            title: 'New medical report',
-            message: `${docName} uploaded a new report "${finalName}" to your record.`,
-          }]).catch(() => {});
+          try {
+            await supabase.from('notifications').insert([{
+              patient_id: selected.id,
+              type: 'report',
+              title: 'New medical report',
+              message: `${docName} uploaded a new report "${finalName}" to your record.`,
+            }]);
+          } catch (notifErr) {
+            console.error('Failed to send notification:', notifErr);
+          }
 
           setStatus({ type: 'success', msg: `Report "${finalName}" uploaded successfully.` });
           setFile(null);
