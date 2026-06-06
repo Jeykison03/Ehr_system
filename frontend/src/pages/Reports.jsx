@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Upload, Trash2, ExternalLink, Search, Loader, AlertCircle, CheckCircle, FilePlus } from 'lucide-react';
+import { FileText, Upload, Trash2, ExternalLink, Search, Loader, AlertCircle, CheckCircle, FilePlus, X } from 'lucide-react';
 import { API_BASE } from '../lib/config';
 
 const Reports = () => {
@@ -11,6 +11,8 @@ const Reports = () => {
   const [error, setError] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [customFileName, setCustomFileName] = useState('');
+  const [previewReport, setPreviewReport] = useState(null);
+  const [confirmDeleteReport, setConfirmDeleteReport] = useState(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -93,14 +95,20 @@ const Reports = () => {
     }
   };
 
-  const deleteReport = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this report?')) return;
+  const handleDeleteClick = (report) => {
+    setConfirmDeleteReport(report);
+  };
+
+  const executeDeleteReport = async () => {
+    if (!confirmDeleteReport) return;
     try {
-      const res = await fetch(`${API_BASE}/reports/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/reports/${confirmDeleteReport.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed.');
-      setReports(r => r.filter(x => x.id !== id));
+      setReports(r => r.filter(x => x.id !== confirmDeleteReport.id));
+      setConfirmDeleteReport(null);
     } catch (e) {
-      alert(e.message);
+      setError(e.message);
+      setConfirmDeleteReport(null);
     }
   };
 
@@ -148,7 +156,7 @@ const Reports = () => {
         ) : (
           <div className="reports-grid">
             {filteredReports.map(report => (
-              <div key={report.id} className="report-card">
+              <div key={report.id} className="report-card" onClick={() => setPreviewReport(report)} style={{ cursor: 'pointer' }}>
                 <div className="report-icon">
                   <FileText size={22} color="#2563eb" />
                 </div>
@@ -158,11 +166,11 @@ const Reports = () => {
                     Uploaded: {report.upload_date ? new Date(report.upload_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                   </div>
                 </div>
-                <div className="report-actions">
-                  <a href={report.file_url} download={report.file_name} target="_blank" rel="noreferrer" className="btn-icon" title="View or Download">
+                <div className="report-actions" onClick={e => e.stopPropagation()}>
+                  <a href={report.file_url} download={report.file_name} className="btn-icon" title="Download File">
                     <ExternalLink size={15} />
                   </a>
-                  <button className="btn-icon danger" onClick={() => deleteReport(report.id)} title="Delete Record">
+                  <button className="btn-icon danger" onClick={() => handleDeleteClick(report)} title="Delete Record">
                     <Trash2 size={15} />
                   </button>
                 </div>
@@ -229,7 +237,131 @@ const Reports = () => {
         )}
       </div>
 
-      <style jsx>{`
+      {/* ── REPORT PREVIEW MODAL ── */}
+      {previewReport && (
+        <div className="rep-modal-overlay" onClick={() => setPreviewReport(null)}>
+          <div className="rep-modal" onClick={e => e.stopPropagation()}>
+            <div className="rep-modal-header">
+              <h3>{previewReport.file_name}</h3>
+              <button className="rep-modal-close" onClick={() => setPreviewReport(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="rep-modal-body">
+              <div className="rep-modal-meta">
+                <span><strong>File Type:</strong> {previewReport.file_type || 'Unknown'}</span>
+                <span><strong>Uploaded On:</strong> {previewReport.upload_date ? new Date(previewReport.upload_date).toLocaleDateString() : '—'}</span>
+              </div>
+              
+              <div className="rep-preview-container">
+                {previewReport.file_url?.startsWith('data:image/') || previewReport.file_type?.startsWith('image/') ? (
+                  <img src={previewReport.file_url} alt={previewReport.file_name} className="rep-preview-img" />
+                ) : previewReport.file_url?.startsWith('data:application/pdf') || previewReport.file_type === 'application/pdf' ? (
+                  <iframe src={previewReport.file_url} title={previewReport.file_name} className="rep-preview-pdf" />
+                ) : (
+                  <div className="rep-preview-placeholder">
+                    <FileText size={48} />
+                    <span>Direct preview not supported for this file type. Please download to view.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="rep-modal-actions">
+              <a href={previewReport.file_url} download={previewReport.file_name} className="btn btn-primary">
+                Download Report
+              </a>
+              <button className="btn btn-outline" onClick={() => setPreviewReport(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CUSTOM DELETE CONFIRMATION MODAL ── */}
+      {confirmDeleteReport && (
+        <div className="rep-modal-overlay" onClick={() => setConfirmDeleteReport(null)}>
+          <div className="rep-modal rep-modal-confirm" onClick={e => e.stopPropagation()}>
+            <div className="rep-modal-header">
+              <h3>Delete Report</h3>
+              <button className="rep-modal-close" onClick={() => setConfirmDeleteReport(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="rep-modal-body">
+              <p>Are you sure you want to permanently delete the report <strong>{confirmDeleteReport.file_name}</strong>?</p>
+              <p className="confirm-warning">⚠️ This action cannot be undone and will delete it from the secure database.</p>
+            </div>
+            <div className="rep-modal-actions">
+              <button className="btn btn-danger" onClick={executeDeleteReport}>Delete</button>
+              <button className="btn btn-outline" onClick={() => setConfirmDeleteReport(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        /* ── MODALS ── */
+        .rep-modal-overlay {
+          position: fixed; inset: 0;
+          background: rgba(15, 23, 42, 0.45);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 1000;
+          animation: repFadeIn 0.2s ease-out;
+        }
+        @keyframes repFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .rep-modal {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(20px);
+          border: 1px solid rgba(255, 255, 255, 0.85);
+          border-radius: 1.5rem;
+          padding: 2rem;
+          width: min(640px, 92vw);
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+          display: flex; flex-direction: column; gap: 1.25rem;
+          animation: repScaleUp 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .rep-modal-confirm {
+          width: min(450px, 92vw);
+        }
+        @keyframes repScaleUp { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .rep-modal-header { display: flex; justify-content: space-between; align-items: center; }
+        .rep-modal-header h3 { font-size: 1.25rem; font-weight: 800; color: #0f172a; margin: 0; font-family: 'Outfit', sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 85%; }
+        .rep-modal-close { background: none; border: none; color: #64748b; cursor: pointer; padding: 0.35rem; border-radius: 0.5rem; transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+        .rep-modal-close:hover { background: #f1f5f9; color: #0f172a; }
+
+        .rep-modal-body { display: flex; flex-direction: column; gap: 1rem; }
+        .rep-modal-meta { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.8rem; color: #64748b; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem; }
+        .rep-preview-container {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.75rem;
+          min-height: 200px;
+          max-height: 380px;
+          display: flex; align-items: center; justify-content: center;
+          overflow: hidden;
+          position: relative;
+        }
+        .rep-preview-img { max-width: 100%; max-height: 380px; object-fit: contain; }
+        .rep-preview-pdf { width: 100%; height: 380px; border: none; }
+        .rep-preview-placeholder { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; color: #94a3b8; font-size: 0.875rem; padding: 2rem; text-align: center; }
+
+        .confirm-warning { color: #ef4444; font-weight: 600; font-size: 0.85rem; margin-top: 0.5rem; }
+
+        .rep-modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem; }
+        .rep-modal-actions .btn {
+          padding: 0.625rem 1.25rem; border-radius: 0.625rem; font-weight: 700; font-size: 0.875rem; cursor: pointer;
+          transition: all 0.2s; text-decoration: none; border: none; display: flex; align-items: center; gap: 0.5rem;
+        }
+        .rep-modal-actions .btn-primary { background: linear-gradient(135deg, #2563eb, #0ea5e9); color: white; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2); }
+        .rep-modal-actions .btn-primary:hover { opacity: 0.95; transform: translateY(-1px); }
+        .rep-modal-actions .btn-danger { background: #ef4444; color: white; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2); }
+        .rep-modal-actions .btn-danger:hover { background: #dc2626; transform: translateY(-1px); }
+        .rep-modal-actions .btn-outline { background: white; border: 1.5px solid #cbd5e1; color: #475569; }
+        .rep-modal-actions .btn-outline:hover { background: #f8fafc; color: #0f172a; }
+
         .rep-root { display: flex; flex-direction: column; gap: 1.75rem; font-family: 'Inter', sans-serif; padding-bottom: 2rem; position: relative; }
         
         /* BLURRED IMAGE BACKDROP */

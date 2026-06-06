@@ -121,8 +121,15 @@ const Sidebar = ({ profile, onLogout }) => {
           display: flex;
           flex-direction: column;
           gap: 0;
-          position: relative;
-          overflow: hidden;
+          position: sticky;
+          top: 0;
+          height: 100vh;
+          overflow-y: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .sidebar::-webkit-scrollbar {
+          display: none;
         }
 
         /* Ambient glow blobs */
