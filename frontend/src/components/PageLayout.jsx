@@ -10,7 +10,7 @@ import AuroraGrid from './AuroraGrid';
  * The animation now fills 100% of the main-content area (edge-to-edge, no gaps).
  * Inner content gets its own padding via the .page-content-inner div.
  */
-const EXCLUDED_PATHS = ['/profile', '/reports', '/doctor-reports'];
+const EXCLUDED_PATHS = ['/profile', '/reports'];
 
 const PageLayout = ({ children }) => {
   const { pathname } = useLocation();
