@@ -84,3 +84,10 @@ class AlertCreate(BaseModel):
 
 class AlertComment(BaseModel):
     comment: str  # doctor's reply text
+
+class EmailOTPRequest(BaseModel):
+    email: EmailStr
+
+class VerifyOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str

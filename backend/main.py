@@ -7,10 +7,14 @@ import os
 import logging
 import datetime
 import uuid
+import random
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 # pyrefly: ignore [missing-import]
 import bcrypt
 from database import execute_query
-from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate, PrescriptionScanRequest, PatientProfileUpdate, DoctorProfileUpdate, ReportSaveRequest, AlertCreate, AlertComment
+from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate, PrescriptionScanRequest, PatientProfileUpdate, DoctorProfileUpdate, ReportSaveRequest, AlertCreate, AlertComment, EmailOTPRequest, VerifyOTPRequest
 from groq import Groq
 
 # --- LOGGING CONFIGURATION ---
@@ -35,6 +39,69 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
+# --- SMTP CONFIGURATION ---
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+SMTP_USER = os.environ.get("SMTP_USER", "jeykison1974@gmail.com")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
+
+# In-memory OTP store: { email: { "otp": str, "expires_at": datetime } }
+otp_store: Dict[str, Dict] = {}
+
+def send_otp_email(to_email: str, otp: str) -> bool:
+    """Sends a 6-digit OTP via Gmail SMTP. Returns True on success."""
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "CareMed EHR — Your Verification Code"
+        msg["From"] = f"CareMed EHR <{SMTP_USER}>"
+        msg["To"] = to_email
+
+        html_body = f"""
+        <html>
+          <body style="margin:0;padding:0;background:#0b0f19;font-family:'Segoe UI',sans-serif;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0f19;padding:40px 0;">
+              <tr><td align="center">
+                <table width="520" cellpadding="0" cellspacing="0" style="background:#0f1729;border:1px solid rgba(255,255,255,0.07);border-radius:16px;overflow:hidden;">
+                  <tr>
+                    <td style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);padding:28px 40px;text-align:center;">
+                      <h1 style="color:white;margin:0;font-size:1.6rem;letter-spacing:-0.5px;">&#128137; CareMed EHR</h1>
+                      <p style="color:rgba(255,255,255,0.75);margin:6px 0 0;font-size:0.9rem;">Electronic Health Record Network</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:40px;">
+                      <h2 style="color:white;font-size:1.3rem;margin:0 0 12px;">Email Verification</h2>
+                      <p style="color:#94a3b8;font-size:0.95rem;line-height:1.6;margin:0 0 32px;">Use the 6-digit code below to verify your account. This code expires in <strong style="color:white;">10 minutes</strong>.</p>
+                      <div style="display:flex;justify-content:center;margin:0 0 32px;">
+                        <div style="letter-spacing:12px;font-size:2.8rem;font-weight:700;color:white;background:rgba(14,165,233,0.1);border:2px solid rgba(14,165,233,0.3);border-radius:12px;padding:18px 32px;text-align:center;font-family:'Courier New',monospace;">{otp}</div>
+                      </div>
+                      <p style="color:#64748b;font-size:0.82rem;line-height:1.5;margin:0;">If you did not attempt to register on CareMed EHR, you can safely ignore this email. Do not share this code with anyone.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="background:#070913;padding:20px 40px;border-top:1px solid rgba(255,255,255,0.04);text-align:center;">
+                      <p style="color:#334155;font-size:0.8rem;margin:0;">© 2026 CareMed EHR Network. All health records encrypted end-to-end.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td></tr>
+            </table>
+          </body>
+        </html>
+        """
+        msg.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, to_email, msg.as_string())
+        logger.info(f"OTP email sent successfully to {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send OTP email: {str(e)}")
+        return False
+
 # --- AI CONFIGURATION ---
 try:
     GROQ_KEY = os.environ.get("GROQ_API_KEY")
@@ -46,6 +113,51 @@ except Exception as e:
     logger.error(f"Critical Error: AI Initialization failed: {str(e)}")
 
 # --- AUTHENTICATION ENDPOINTS ---
+
+@app.post("/auth/send-otp", status_code=200)
+async def send_otp(payload: EmailOTPRequest):
+    """
+    Generates a 6-digit OTP, stores it in memory with 10-minute expiry,
+    and sends it to the provided email address.
+    """
+    email = payload.email.strip().lower()
+    otp = str(random.randint(100000, 999999))
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+    otp_store[email] = {"otp": otp, "expires_at": expires_at}
+    
+    success = send_otp_email(email, otp)
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send verification email. Please check your email address and try again."
+        )
+    
+    return {"status": "success", "message": "Verification code sent to your email."}
+
+
+@app.post("/auth/verify-otp", status_code=200)
+async def verify_otp(payload: VerifyOTPRequest):
+    """
+    Verifies the OTP entered by the user.
+    Returns success if valid, raises error if invalid or expired.
+    """
+    email = payload.email.strip().lower()
+    stored = otp_store.get(email)
+    
+    if not stored:
+        raise HTTPException(status_code=400, detail="No verification code found for this email. Please request a new one.")
+    
+    if datetime.datetime.utcnow() > stored["expires_at"]:
+        del otp_store[email]
+        raise HTTPException(status_code=400, detail="Verification code has expired. Please request a new one.")
+    
+    if stored["otp"] != payload.otp.strip():
+        raise HTTPException(status_code=400, detail="Incorrect verification code. Please try again.")
+    
+    # Mark OTP as verified (keep in store so signup can confirm it was verified)
+    otp_store[email]["verified"] = True
+    return {"status": "success", "message": "Email verified successfully!"}
+
 
 @app.post("/auth/signup", status_code=201)
 async def signup_user(user: UserSignup):
