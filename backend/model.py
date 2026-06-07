@@ -91,3 +91,12 @@ class EmailOTPRequest(BaseModel):
 class VerifyOTPRequest(BaseModel):
     email: EmailStr
     otp: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+    role: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+

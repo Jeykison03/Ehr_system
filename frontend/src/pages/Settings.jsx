@@ -10,8 +10,38 @@ const Settings = () => {
   const [doctorCode, setDoctorCode] = useState('');
   const [savingDoctorCode, setSavingDoctorCode] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetStatus, setResetStatus] = useState(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  const handleResetPassword = async () => {
+    if (!user?.email || !user?.role) return;
+    setResetLoading(true);
+    setResetStatus(null);
+    try {
+      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, role: user.role })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to request password reset.');
+      
+      setResetStatus({
+        type: 'success',
+        message: 'A password reset link has been successfully sent to your email. Please check your inbox.'
+      });
+    } catch (e) {
+      setResetStatus({
+        type: 'error',
+        message: e.message || 'Failed to send reset link.'
+      });
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (user?.id) {
@@ -193,9 +223,26 @@ const Settings = () => {
             <h3>🔒 Account Security</h3>
           </div>
           <p className="sec-desc">Update passwords or active encryption preferences to secure patient confidentiality.</p>
-          <button className="btn-security">
-            <Key size={14} /> Change Security Password
+          <button 
+            className="btn-security" 
+            onClick={handleResetPassword} 
+            disabled={resetLoading}
+          >
+            {resetLoading ? (
+              <>
+                <Loader size={14} className="set-spin" /> Sending Reset Link...
+              </>
+            ) : (
+              <>
+                <Key size={14} /> Change Security Password
+              </>
+            )}
           </button>
+          {resetStatus && (
+            <div className={`reset-alert ${resetStatus.type}-alert`}>
+              <p>{resetStatus.message}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -306,6 +353,31 @@ const Settings = () => {
 
         .set-spin { animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        .reset-alert {
+          margin-top: 0.75rem;
+          padding: 0.85rem 1rem;
+          border-radius: 0.625rem;
+          font-size: 0.8rem;
+          line-height: 1.4;
+          font-weight: 500;
+          animation: fadeIn 0.3s ease-out;
+        }
+        .success-alert {
+          background: rgba(16, 185, 129, 0.08);
+          border: 1.5px solid rgba(16, 185, 129, 0.3);
+          color: #065f46;
+          box-shadow: 0 0 10px rgba(16, 185, 129, 0.05);
+        }
+        .error-alert {
+          background: rgba(239, 68, 68, 0.06);
+          border: 1.5px solid rgba(239, 68, 68, 0.25);
+          color: #b91c1c;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
     </div>
   );

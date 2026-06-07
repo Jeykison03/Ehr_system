@@ -10,6 +10,7 @@ import PageLayout from './components/PageLayout';
 import Login from './pages/Login';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import ResetPassword from './pages/ResetPassword';
 
 // Pages – patient
 import PatientDashboard from './pages/PatientDashboard';
@@ -60,6 +61,7 @@ function App() {
       <div className="app-container">
         <Routes>
           <Route path="/login" element={!profile ? <Login /> : <Navigate to="/" />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           <Route
             path="/*"

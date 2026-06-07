@@ -14,7 +14,7 @@ from email.mime.text import MIMEText
 # pyrefly: ignore [missing-import]
 import bcrypt
 from database import execute_query
-from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate, PrescriptionScanRequest, PatientProfileUpdate, DoctorProfileUpdate, ReportSaveRequest, AlertCreate, AlertComment, EmailOTPRequest, VerifyOTPRequest
+from model import UserSignup, UserLogin, SymptomCreate, PrescriptionCreate, PrescriptionScanRequest, PatientProfileUpdate, DoctorProfileUpdate, ReportSaveRequest, AlertCreate, AlertComment, EmailOTPRequest, VerifyOTPRequest, ForgotPasswordRequest, ResetPasswordRequest
 from groq import Groq
 
 # --- LOGGING CONFIGURATION ---
@@ -47,6 +47,65 @@ SMTP_PASS = os.environ.get("SMTP_PASS", "")
 
 # In-memory OTP store: { email: { "otp": str, "expires_at": datetime } }
 otp_store: Dict[str, Dict] = {}
+
+# In-memory password reset token store: { token: { "email": str, "role": str, "expires_at": datetime } }
+reset_token_store: Dict[str, Dict] = {}
+
+def send_reset_email(to_email: str, reset_link: str) -> bool:
+    """Sends a password reset link email via Gmail SMTP. Returns True on success."""
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "CareMed EHR — Reset Your Password"
+        msg["From"] = f"CareMed EHR <{SMTP_USER}>"
+        msg["To"] = to_email
+
+        html_body = f"""
+        <html>
+          <body style="margin:0;padding:0;background:#0b0f19;font-family:'Segoe UI',sans-serif;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0f19;padding:40px 0;">
+              <tr><td align="center">
+                <table width="520" cellpadding="0" cellspacing="0" style="background:#0f1729;border:1px solid rgba(255,255,255,0.07);border-radius:16px;overflow:hidden;">
+                  <tr>
+                    <td style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);padding:28px 40px;text-align:center;">
+                      <h1 style="color:white;margin:0;font-size:1.6rem;letter-spacing:-0.5px;">&#128137; CareMed EHR</h1>
+                      <p style="color:rgba(255,255,255,0.75);margin:6px 0 0;font-size:0.9rem;">Electronic Health Record Network</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:40px;">
+                      <h2 style="color:white;font-size:1.3rem;margin:0 0 12px;">Password Reset Request</h2>
+                      <p style="color:#94a3b8;font-size:0.95rem;line-height:1.6;margin:0 0 32px;">We received a request to reset your password. Click the button below to choose a new password. This link expires in <strong style="color:white;">1 hour</strong>.</p>
+                      <div style="display:flex;justify-content:center;margin:0 0 32px;">
+                        <a href="{reset_link}" style="display:inline-block;background:linear-gradient(135deg,#1d4ed8,#0ea5e9);color:white;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:bold;font-size:0.95rem;box-shadow:0 4px 12px rgba(14,165,233,0.3);">Reset Password</a>
+                      </div>
+                      <p style="color:#64748b;font-size:0.82rem;line-height:1.5;margin:0 0 16px;">If the button above does not work, copy and paste this URL into your browser:</p>
+                      <p style="color:#0ea5e9;font-size:0.8rem;word-break:break-all;margin:0 0 32px;">{reset_link}</p>
+                      <p style="color:#64748b;font-size:0.82rem;line-height:1.5;margin:0;">If you did not make this request, you can safely ignore this email. Your password will remain unchanged.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="background:#070913;padding:20px 40px;border-top:1px solid rgba(255,255,255,0.04);text-align:center;">
+                      <p style="color:#334155;font-size:0.8rem;margin:0;">© 2026 CareMed EHR Network. All health records encrypted end-to-end.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td></tr>
+            </table>
+          </body>
+        </html>
+        """
+        msg.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, to_email, msg.as_string())
+        logger.info(f"Password reset email sent successfully to {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send password reset email: {str(e)}")
+        return False
 
 def send_otp_email(to_email: str, otp: str) -> bool:
     """Sends a 6-digit OTP via Gmail SMTP. Returns True on success."""
@@ -316,6 +375,73 @@ async def login_user(user: UserLogin):
     except Exception as err:
         logger.error(f"Login Failure: {str(err)}")
         raise HTTPException(status_code=401, detail="Authentication failed.")
+
+@app.post("/auth/forgot-password", status_code=200)
+async def forgot_password(payload: ForgotPasswordRequest):
+    email = payload.email.strip().lower()
+    role = payload.role.strip().lower()
+    
+    if role == "doctor":
+        user_check = execute_query("SELECT id FROM doctors WHERE email = %s", (email,), fetch="one")
+    elif role == "patient":
+        user_check = execute_query("SELECT id FROM patients WHERE email = %s", (email,), fetch="one")
+    else:
+        raise HTTPException(status_code=400, detail="Invalid role specified.")
+        
+    if not user_check:
+        raise HTTPException(status_code=404, detail=f"No account found with email {email} under role {role}.")
+
+    token = str(uuid.uuid4())
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    reset_token_store[token] = {"email": email, "role": role, "expires_at": expires_at}
+    
+    reset_link = f"http://localhost:5173/reset-password?token={token}"
+    
+    success = send_reset_email(email, reset_link)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send password reset email. Please verify SMTP settings.")
+        
+    return {"status": "success", "message": "Password reset link sent successfully to your email."}
+
+@app.post("/auth/reset-password", status_code=200)
+async def reset_password(payload: ResetPasswordRequest):
+    token = payload.token.strip()
+    stored = reset_token_store.get(token)
+    
+    if not stored:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token. Please request a new password reset link.")
+        
+    if datetime.datetime.utcnow() > stored["expires_at"]:
+        del reset_token_store[token]
+        raise HTTPException(status_code=400, detail="The reset link has expired. Please request a new password reset link.")
+        
+    email = stored["email"]
+    role = stored["role"]
+    password_hash = bcrypt.hashpw(payload.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    try:
+        if role == "doctor":
+            update_res = execute_query(
+                "UPDATE doctors SET hash_password = %s WHERE email = %s RETURNING id",
+                (password_hash, email),
+                fetch="one"
+            )
+        else:
+            update_res = execute_query(
+                "UPDATE patients SET hash_password = %s WHERE email = %s RETURNING id",
+                (password_hash, email),
+                fetch="one"
+            )
+            
+        if not update_res:
+            raise HTTPException(status_code=500, detail="Could not update password in database.")
+            
+    except Exception as err:
+        logger.error(f"Reset Password Database Error: {str(err)}")
+        raise HTTPException(status_code=500, detail=f"Database error during password reset: {str(err)}")
+        
+    del reset_token_store[token]
+    return {"status": "success", "message": "Your password has been successfully reset. You can now login with your new password."}
 
 # --- SYMPTOM ENDPOINTS ---
 
