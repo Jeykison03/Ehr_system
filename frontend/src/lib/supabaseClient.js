@@ -1,16 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  // eslint-disable-next-line no-console
-  console.warn(
-    'Missing Supabase env vars. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
-  );
-}
+const isInvalid = (val) => !val || val === 'undefined' || val === 'null' || val === '';
 
-// Use placeholders if keys are missing to prevent createClient from throwing on startup
-export const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY)
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-  : createClient('https://placeholder-url.supabase.co', 'placeholder-key');
+const finalUrl = isInvalid(SUPABASE_URL) ? 'https://knbtifrtswccfxnoaymv.supabase.co' : SUPABASE_URL;
+const finalKey = isInvalid(SUPABASE_ANON_KEY) ? 'sb_publishable_wpzK9ny7mIeUermZDefzkQ_oPUsr6Pi' : SUPABASE_ANON_KEY;
+
+export const supabase = createClient(finalUrl, finalKey);
+
 
 

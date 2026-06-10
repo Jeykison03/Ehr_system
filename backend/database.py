@@ -18,14 +18,15 @@ logger = logging.getLogger("MiniEHR-Database")
 # Determine Database connection URL
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
-    supabase_url = os.environ.get("SUPABASE_URL", "")
-    db_password = os.environ.get("DB_PASSWORD") or os.environ.get("POSTGRES_PASSWORD", "")
+    supabase_url = os.environ.get("SUPABASE_URL", "https://knbtifrtswccfxnoaymv.supabase.co")
+    db_password = os.environ.get("DB_PASSWORD") or os.environ.get("POSTGRES_PASSWORD", "OIEMqOoh5CCeVKJ0")
     if supabase_url and db_password and db_password != "your_supabase_db_password":
         match = re.search(r"https://(.*?)\.supabase\.co", supabase_url)
         if match:
             ref = match.group(1)
             # Use SSL Mode required for Supabase cloud (connecting over the IPv4 pooler at eu-west-1 on port 6543)
             DATABASE_URL = f"postgresql://postgres.{ref}:{db_password}@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?sslmode=require"
+
 
 db_pool = None
 

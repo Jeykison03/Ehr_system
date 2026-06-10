@@ -1,5 +1,6 @@
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://knbtifrtswccfxnoaymv.supabase.co';
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_wpzK9ny7mIeUermZDefzkQ_oPUsr6Pi';
+
 
 // When running via docker-compose, frontend talks to backend service name.
 export const API_BASE =
