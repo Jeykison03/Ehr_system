@@ -4,6 +4,7 @@ import {
   Activity, Plus, ScanLine, Bell, FileText, ChevronRight,
   AlertTriangle, HeartPulse, Clock, MessageSquare, Stethoscope
 } from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { API_BASE } from '../lib/config';
 
 const getSeverityColor = (s) => {
@@ -61,6 +62,15 @@ const PatientDashboard = () => {
 
   const recentSymptoms = symptoms.slice(0, 5);
 
+  const sugarData = symptoms
+    .filter(s => s.blood_sugar !== null && s.blood_sugar !== undefined && Number(s.blood_sugar) > 0)
+    .map(s => ({
+      date: s.occurrence_date ? new Date(s.occurrence_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown',
+      sugar: Number(s.blood_sugar),
+      description: s.description || 'Check-in'
+    }))
+    .reverse();
+
   return (
     <div className="pd-root">
 
@@ -100,50 +110,81 @@ const PatientDashboard = () => {
       {/* ── MAIN GRID ── */}
       <div className="pd-portal-grid">
 
-        {/* NAVIGATORS */}
-        <div className="pd-nav-card glass-panel">
-          <div className="pd-panel-header">
-            <h2>✨ Quick Navigators</h2>
-            <p>Access your medical features and clinical AI analyzers instantly</p>
+        {/* SUGAR LEVEL GRAPH */}
+        {sugarData.length > 0 ? (
+          <div className="sugar-graph-container glass-panel">
+            <div className="pd-panel-header">
+              <h2>🩸 Blood Sugar Level History</h2>
+              <p>Tracking glycemic trends across logged clinical check-ins (mg/dL)</p>
+            </div>
+            <div style={{ width: '100%', height: 280, marginTop: '1rem' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={sugarData}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="sugarGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(99, 102, 241, 0.15)" />
+                  <XAxis 
+                    dataKey="date" 
+                    tickLine={false}
+                    axisLine={false}
+                    stroke="#94a3b8"
+                    style={{ fontSize: '0.75rem', fontWeight: 500 }}
+                  />
+                  <YAxis 
+                    tickLine={false}
+                    axisLine={false}
+                    stroke="#94a3b8"
+                    style={{ fontSize: '0.75rem', fontWeight: 500 }}
+                    domain={['auto', 'auto']}
+                  />
+                  <Tooltip 
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="custom-chart-tooltip">
+                            <p className="ct-date">{payload[0].payload.date}</p>
+                            <p className="ct-sugar">
+                              <span className="ct-sugar-dot" />
+                              Blood Sugar: <strong>{payload[0].value} mg/dL</strong>
+                            </p>
+                            <p className="ct-desc">{payload[0].payload.description}</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="sugar" 
+                    stroke="#6366f1" 
+                    strokeWidth={3}
+                    fillOpacity={1} 
+                    fill="url(#sugarGradient)" 
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="pd-navigator-buttons">
-            <button className="nav-btn log-symptom" onClick={() => navigate('/symptoms')}>
-              <div className="nav-btn-icon"><Plus size={20} /></div>
-              <div className="nav-btn-content">
-                <span className="nav-btn-title">Log Symptoms</span>
-                <span className="nav-btn-desc">Record sugar levels, meals, and check-ins</span>
-              </div>
-              <ChevronRight size={18} className="nav-btn-arrow" />
-            </button>
-
-            <button className="nav-btn scan-prescription" onClick={() => navigate('/prescription-scan')}>
-              <div className="nav-btn-icon"><ScanLine size={20} /></div>
-              <div className="nav-btn-content">
-                <span className="nav-btn-title">AI Prescription Scan</span>
-                <span className="nav-btn-desc">Identify drugs &amp; side effects instantly</span>
-              </div>
-              <ChevronRight size={18} className="nav-btn-arrow" />
-            </button>
-
-            <button className="nav-btn view-reports" onClick={() => navigate('/reports')}>
-              <div className="nav-btn-icon"><FileText size={20} /></div>
-              <div className="nav-btn-content">
-                <span className="nav-btn-title">Medical Reports</span>
-                <span className="nav-btn-desc">Upload, organize and view diagnostic scans</span>
-              </div>
-              <ChevronRight size={18} className="nav-btn-arrow" />
-            </button>
-
-            <button className="nav-btn reminders" onClick={() => navigate('/reminders')}>
-              <div className="nav-btn-icon"><Bell size={20} /></div>
-              <div className="nav-btn-content">
-                <span className="nav-btn-title">Meds Reminders</span>
-                <span className="nav-btn-desc">Configure active alarms and alerts</span>
-              </div>
-              <ChevronRight size={18} className="nav-btn-arrow" />
-            </button>
+        ) : (
+          <div className="sugar-graph-empty glass-panel">
+            <div className="pd-panel-header">
+              <h2>🩸 Blood Sugar Level History</h2>
+              <p>Tracking glycemic trends across logged clinical check-ins</p>
+            </div>
+            <div className="sge-content">
+              <HeartPulse size={36} color="#cbd5e1" style={{ animation: 'pulse 2s infinite' }} />
+              <p>No blood sugar level records found in your symptoms data.</p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* LATEST SYMPTOM LOGS */}
         <div className="pd-feed-card glass-panel">
@@ -451,6 +492,82 @@ const PatientDashboard = () => {
           animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Sugar level chart styling */
+        .sugar-graph-container {
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+        }
+        .sugar-graph-empty {
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+          min-height: 382px;
+        }
+        .sge-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          flex: 1;
+          gap: 0.75rem;
+          color: #94a3b8;
+          text-align: center;
+          font-size: 0.85rem;
+          padding: 2rem 0;
+        }
+        .sge-content p { margin: 0; }
+
+        .custom-chart-tooltip {
+          background: rgba(15, 23, 42, 0.85);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 0.75rem;
+          padding: 0.75rem 1rem;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+          color: white;
+          font-size: 0.78rem;
+          font-family: 'Inter', sans-serif;
+        }
+        .ct-date {
+          margin: 0 0 0.35rem;
+          color: #94a3b8;
+          font-weight: 600;
+        }
+        .ct-sugar {
+          margin: 0 0 0.25rem;
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          font-size: 0.82rem;
+        }
+        .ct-sugar-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #6366f1;
+          display: inline-block;
+        }
+        .ct-sugar strong {
+          color: #38bdf8;
+        }
+        .ct-desc {
+          margin: 0;
+          color: #cbd5e1;
+          font-style: italic;
+          font-size: 0.72rem;
+          max-width: 180px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 0.8; }
+          50% { transform: scale(1.1); opacity: 1; }
+        }
       `}</style>
     </div>
   );

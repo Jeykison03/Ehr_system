@@ -3,8 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Mail, Phone, MapPin, Hash, Calendar, Activity,
   ChevronDown, ChevronUp, X, Upload, Send, FileText, Droplets,
-  Clock, Pill, AlertCircle, CheckCircle, Loader, StickyNote, Flame
+  Clock, Pill, AlertCircle, CheckCircle, Loader, StickyNote, Flame,
+  HeartPulse
 } from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { supabase } from '../lib/supabaseClient';
 import { getStoredUser } from '../lib/session';
 
@@ -140,6 +142,15 @@ const PatientDetailPage = () => {
     return true;
   });
 
+  const sugarData = filteredSymptoms
+    .filter(s => s.blood_sugar !== null && s.blood_sugar !== undefined && Number(s.blood_sugar) > 0)
+    .map(s => ({
+      date: s.occurrence_date ? new Date(s.occurrence_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown',
+      sugar: Number(s.blood_sugar),
+      description: s.description || 'Check-in'
+    }))
+    .reverse();
+
   /* ── Upload report ── */
   const handleFileChange = e => {
     const f = e.target.files?.[0];
@@ -233,6 +244,78 @@ const PatientDetailPage = () => {
 
         {/* LEFT: SYMPTOMS */}
         <div className="pdp-col-left">
+          {/* SUGAR LEVEL GRAPH */}
+          {sugarData.length > 0 ? (
+            <div className="sugar-graph-container">
+              <div className="graph-header">
+                <h3>🩸 Blood Sugar Level History</h3>
+                <p>Tracking glycemic trends across logged clinical check-ins (mg/dL)</p>
+              </div>
+              <div style={{ width: '100%', height: 200, marginTop: '0.75rem', marginBottom: '1.5rem' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={sugarData}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="pdpSugarGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(99, 102, 241, 0.12)" />
+                    <XAxis 
+                      dataKey="date" 
+                      tickLine={false}
+                      axisLine={false}
+                      stroke="#94a3b8"
+                      style={{ fontSize: '0.72rem', fontWeight: 500 }}
+                    />
+                    <YAxis 
+                      tickLine={false}
+                      axisLine={false}
+                      stroke="#94a3b8"
+                      style={{ fontSize: '0.72rem', fontWeight: 500 }}
+                      domain={['auto', 'auto']}
+                    />
+                    <Tooltip 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="custom-chart-tooltip">
+                              <p className="ct-date">{payload[0].payload.date}</p>
+                              <p className="ct-sugar">
+                                <span className="ct-sugar-dot" />
+                                Blood Sugar: <strong>{payload[0].value} mg/dL</strong>
+                              </p>
+                              <p className="ct-desc">{payload[0].payload.description}</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="sugar" 
+                      stroke="#6366f1" 
+                      strokeWidth={2.5}
+                      fillOpacity={1} 
+                      fill="url(#pdpSugarGradient)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ) : (
+            <div className="sugar-graph-empty">
+              <div className="sge-content">
+                <HeartPulse size={28} color="#cbd5e1" style={{ animation: 'pulse 2s infinite' }} />
+                <p>No blood sugar levels recorded for this patient.</p>
+              </div>
+            </div>
+          )}
+
           <div className="pdp-section-head">
             <div className="pdp-sec-title">
               <Activity size={17} color="#6366f1" />
@@ -529,7 +612,28 @@ const PatientDetailPage = () => {
           justify-content: center; padding: 3rem 1rem; gap: 0.75rem;
           color: #94a3b8; font-size: 0.875rem; text-align: center;
         }
-        .pdp-sym-list { display: flex; flex-direction: column; gap: 0.5rem; }
+        .pdp-sym-list { 
+          display: flex; 
+          flex-direction: column; 
+          gap: 0.5rem; 
+          max-height: 480px; 
+          overflow-y: auto; 
+          padding-right: 0.4rem;
+        }
+        /* Custom scrollbar styling */
+        .pdp-sym-list::-webkit-scrollbar {
+          width: 6px;
+        }
+        .pdp-sym-list::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .pdp-sym-list::-webkit-scrollbar-thumb {
+          background: rgba(99, 102, 241, 0.25);
+          border-radius: 4px;
+        }
+        .pdp-sym-list::-webkit-scrollbar-thumb:hover {
+          background: rgba(99, 102, 241, 0.45);
+        }
         .pdp-sym-row {
           display: flex; align-items: center; justify-content: space-between;
           gap: 1rem; padding: 0.9rem 1rem; border-radius: 0.875rem;
@@ -671,6 +775,104 @@ const PatientDetailPage = () => {
 
         .sm-img-wrap { border-radius: 0.875rem; overflow: hidden; }
         .sm-img { width: 100%; object-fit: cover; max-height: 200px; }
+
+        /* Sugar level chart styling */
+        .sugar-graph-container {
+          background: rgba(255, 255, 255, 0.65);
+          border: 1px solid rgba(99, 102, 241, 0.15);
+          border-radius: 1.25rem;
+          padding: 1.25rem;
+          box-shadow: 0 4px 20px rgba(99, 102, 241, 0.04);
+          margin-bottom: 1.25rem;
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+        }
+        .sugar-graph-empty {
+          background: rgba(255, 255, 255, 0.45);
+          border: 1.5px dashed rgba(99, 102, 241, 0.15);
+          border-radius: 1.25rem;
+          padding: 2.25rem 1.5rem;
+          text-align: center;
+          margin-bottom: 1.25rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+        }
+        .sge-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.5rem;
+          color: #94a3b8;
+          font-size: 0.8rem;
+        }
+        .sge-content p { margin: 0; }
+
+        .graph-header h3 {
+          font-size: 0.95rem;
+          font-weight: 800;
+          color: #0f172a;
+          margin: 0;
+          font-family: 'Outfit', sans-serif;
+        }
+        .graph-header p {
+          font-size: 0.75rem;
+          color: #64748b;
+          margin: 0.15rem 0 0;
+        }
+
+        .custom-chart-tooltip {
+          background: rgba(15, 23, 42, 0.85);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 0.75rem;
+          padding: 0.75rem 1rem;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+          color: white;
+          font-size: 0.78rem;
+          font-family: 'Inter', sans-serif;
+          z-index: 9999;
+        }
+        .ct-date {
+          margin: 0 0 0.35rem;
+          color: #94a3b8;
+          font-weight: 600;
+        }
+        .ct-sugar {
+          margin: 0 0 0.25rem;
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          font-size: 0.82rem;
+        }
+        .ct-sugar-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #6366f1;
+          display: inline-block;
+        }
+        .ct-sugar strong {
+          color: #38bdf8;
+        }
+        .ct-desc {
+          margin: 0;
+          color: #cbd5e1;
+          font-style: italic;
+          font-size: 0.72rem;
+          max-width: 180px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 0.8; }
+          50% { transform: scale(1.1); opacity: 1; }
+        }
       `}</style>
     </div>
   );
