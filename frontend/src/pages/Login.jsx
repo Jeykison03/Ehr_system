@@ -15,13 +15,17 @@ import {
   Heart,
   FileText,
   CheckCircle,
-  RefreshCw
+  RefreshCw,
+  Send,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -63,6 +67,7 @@ const Login = () => {
     setIsForgotPassword(false);
     setResetSent(false);
     setResetSending(false);
+    setShowPassword(false);
     setError(null);
     setCreatedDoctorCode(null);
     setDoctorCode('');
@@ -80,8 +85,9 @@ const Login = () => {
   };
 
   const toggleMode = () => {
+    const nextRegistering = !isRegistering;
     resetAll();
-    setIsRegistering(prev => !prev);
+    setIsRegistering(nextRegistering);
   };
 
   const goToStep = (targetStep) => {
@@ -665,7 +671,21 @@ const Login = () => {
                           <label className="form-label">Password</label>
                           <div className="input-with-icon">
                             <Lock className="input-icon" size={18} />
-                            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+                            <input 
+                              type={showPassword ? "text" : "password"} 
+                              value={password} 
+                              onChange={e => setPassword(e.target.value)} 
+                              required 
+                              placeholder="••••••••" 
+                            />
+                            <button
+                              type="button"
+                              className="password-toggle-btn"
+                              onClick={() => setShowPassword(!showPassword)}
+                              tabIndex="-1"
+                            >
+                              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
                           </div>
                         </div>
                         <div className="helper-text" style={{display:'flex', alignItems:'center', gap:'5px', marginTop:'-0.25rem'}}>
@@ -738,7 +758,21 @@ const Login = () => {
                       <label className="form-label">Password</label>
                       <div className="input-with-icon">
                         <Lock className="input-icon" size={18} />
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+                        <input 
+                          type={showPassword ? "text" : "password"} 
+                          value={password} 
+                          onChange={e => setPassword(e.target.value)} 
+                          required 
+                          placeholder="••••••••" 
+                        />
+                        <button
+                          type="button"
+                          className="password-toggle-btn"
+                          onClick={() => setShowPassword(!showPassword)}
+                          tabIndex="-1"
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
                       </div>
                       <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
                         <button
@@ -1018,10 +1052,26 @@ const Login = () => {
         .input-with-icon { position: relative; display: flex; align-items: center; }
         .input-icon { position: absolute; left: 1rem; color: #475569; pointer-events: none; transition: color 0.2s; }
         .input-with-icon input {
-          width: 100%; padding: 0.75rem 1rem 0.75rem 2.75rem;
+          width: 100%; padding: 0.75rem 2.5rem 0.75rem 2.75rem;
           background: rgba(15,23,42,0.8); border: 1px solid rgba(255,255,255,0.08);
           color: white; font-size: 0.95rem; border-radius: var(--radius-md);
           transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .password-toggle-btn {
+          position: absolute;
+          right: 1rem;
+          background: none;
+          border: none;
+          color: #475569;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          transition: color 0.2s;
+        }
+        .password-toggle-btn:hover {
+          color: var(--accent);
         }
         .input-with-icon input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14,165,233,0.15); }
         .custom-select {
