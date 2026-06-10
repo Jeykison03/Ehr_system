@@ -223,7 +223,13 @@ const PatientDetailPage = () => {
 
       {/* ── PATIENT HERO CARD ── */}
       <div className="pdp-hero-card">
-        <div className="pdp-hero-av" style={{ background: grad }}>{init}</div>
+        <div className="pdp-hero-av" style={{ background: patient.avatar_url ? 'transparent' : grad }}>
+          {patient.avatar_url ? (
+            <img src={patient.avatar_url} alt="avatar" className="pdp-hero-av-img" />
+          ) : (
+            init
+          )}
+        </div>
         <div className="pdp-hero-info">
           <h1 className="pdp-hero-name">{patient.full_name}</h1>
           <div className="pdp-hero-meta">
@@ -531,6 +537,12 @@ const PatientDetailPage = () => {
           color: white; font-weight: 800; font-size: 1.4rem;
           display: flex; align-items: center; justify-content: center;
           box-shadow: 0 4px 16px rgba(0,0,0,0.15); flex-shrink: 0;
+          overflow: hidden;
+        }
+        .pdp-hero-av-img {
+          width: 100%; height: 100%;
+          border-radius: 50%;
+          object-fit: cover;
         }
         .pdp-hero-name {
           font-size: 1.65rem; font-weight: 800; margin: 0 0 0.625rem;

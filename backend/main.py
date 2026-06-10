@@ -362,6 +362,7 @@ async def login_user(user: UserLogin):
             "full_name": full_name_val,
             "age": profile.get("age"),
             "phone_number": profile.get("phone_number"),
+            "avatar_url": profile.get("avatar_url"),
             "role": user.role,
         }
         if user.role == "doctor":

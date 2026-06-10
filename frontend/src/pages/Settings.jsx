@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Shield, User, ToggleLeft, ToggleRight, Loader, Edit3, Key } from 'lucide-react';
 import { API_BASE } from '../lib/config';
 
-const Settings = () => {
+const Settings = ({ onProfileUpdate }) => {
   const navigate = useNavigate();
   const [settings, setSettings] = useState({ alerts_enabled: true });
   const [profile, setProfile] = useState(null);
@@ -89,6 +89,7 @@ const Settings = () => {
       alert(data.message);
       const updatedUser = { ...user, doctor_id: data.doctor_id };
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      if (onProfileUpdate) onProfileUpdate(updatedUser);
       
       setDoctorCode('');
       fetchSettings();

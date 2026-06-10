@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Phone, MapPin, Calendar, Heart, Shield, Camera, Mail, Loader, CheckCircle, AlertCircle, Edit, Stethoscope, Sparkles } from 'lucide-react';
 import { API_BASE } from '../lib/config';
 
-const Profile = () => {
+const Profile = ({ onProfileUpdate }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -111,6 +111,7 @@ const Profile = () => {
         avatar_url: data.data.avatar_url,
       };
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      if (onProfileUpdate) onProfileUpdate(updatedUser);
       setProfile({
         ...profile,
         ...data.data,
@@ -144,6 +145,7 @@ const Profile = () => {
       // Sync local storage assigned doctor ID
       const updatedUser = { ...sessionUser, doctor_id: data.doctor_id };
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      if (onProfileUpdate) onProfileUpdate(updatedUser);
       
       setNewDoctorCode('');
       // Reload profile

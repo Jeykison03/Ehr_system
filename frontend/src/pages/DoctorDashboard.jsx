@@ -235,7 +235,13 @@ const DoctorDashboard = () => {
                     onClick={() => navigate(`/doctor/patient/${p.id}`)}
                   >
                     <div className="dpc-top">
-                      <div className="dpc-avatar" style={{ background: grad }}>{init}</div>
+                      <div className="dpc-avatar" style={{ background: p.avatar_url ? 'transparent' : grad }}>
+                        {p.avatar_url ? (
+                          <img src={p.avatar_url} alt="avatar" className="dpc-avatar-img" />
+                        ) : (
+                          init
+                        )}
+                      </div>
                       <div className="dpc-id-badge">{p.short_id}</div>
                     </div>
                     <div className="dpc-name">{name}</div>
@@ -560,6 +566,12 @@ const DoctorDashboard = () => {
           display: flex; align-items: center; justify-content: center;
           box-shadow: 0 4px 12px rgba(0,0,0,0.15);
           flex-shrink: 0;
+          overflow: hidden;
+        }
+        .dpc-avatar-img {
+          width: 100%; height: 100%;
+          object-fit: cover;
+          border-radius: 14px;
         }
         .dpc-id-badge {
           background: #f3e8ff;

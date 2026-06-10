@@ -90,8 +90,8 @@ function App() {
                         <Route path="/reminders"          element={<Reminders />} />
 
                         {/* Shared */}
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="/profile"  element={<Profile />} />
+                        <Route path="/settings" element={<Settings onProfileUpdate={(updated) => setProfile(updated)} />} />
+                        <Route path="/profile"  element={<Profile onProfileUpdate={(updated) => setProfile(updated)} />} />
                       </Routes>
                     </PageLayout>
                   </main>
