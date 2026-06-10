@@ -628,7 +628,7 @@ const PatientDetailPage = () => {
           display: flex; 
           flex-direction: column; 
           gap: 0.5rem; 
-          max-height: 480px; 
+          max-height: 330px; 
           overflow-y: auto; 
           padding-right: 0.4rem;
         }
