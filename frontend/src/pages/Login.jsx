@@ -20,6 +20,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
+import { API_BASE } from '../lib/config';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -53,7 +54,7 @@ const Login = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const otpRefs = useRef([]);
 
-  const API_URL = "http://localhost:8000";
+  const API_URL = API_BASE;
 
   useEffect(() => {
     if (resendCooldown > 0) {
