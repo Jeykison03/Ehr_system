@@ -36,6 +36,11 @@ const Login = () => {
   const [createdDoctorCode, setCreatedDoctorCode] = useState(null);
   const [animationClass, setAnimationClass] = useState('slide-in');
 
+  // Forgot password states
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetSending, setResetSending] = useState(false);
+
   // OTP state
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [otpSending, setOtpSending] = useState(false);
@@ -55,6 +60,9 @@ const Login = () => {
 
   const resetAll = () => {
     setIsRegistering(false);
+    setIsForgotPassword(false);
+    setResetSent(false);
+    setResetSending(false);
     setError(null);
     setCreatedDoctorCode(null);
     setDoctorCode('');
@@ -252,14 +260,36 @@ const Login = () => {
     }
   };
 
+  const handleSendResetLink = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) { setError('Please enter your email address.'); return; }
+    setError(null);
+    setResetSending(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), role })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to send reset link.');
+      setResetSent(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setResetSending(false);
+    }
+  };
+
   const getSubmitHandler = () => {
+    if (isForgotPassword) return handleSendResetLink;
     if (!isRegistering) return handleLogin;
     if (step === 4) return handleSendOTP;
     if (step === 5) return handleVerifyAndRegister;
     return handleNextStep;
   };
 
-  const isBusy = loading || otpSending || otpVerifying;
+  const isBusy = loading || otpSending || otpVerifying || resetSending;
   const TOTAL_STEPS = 5;
 
   return (
@@ -338,13 +368,15 @@ const Login = () => {
             <>
               {/* HEADER */}
               <div className="auth-header">
-                <h2>{isRegistering ? 'Register Profile' : 'Secure Sign In'}</h2>
+                <h2>{isForgotPassword ? 'Reset Password' : isRegistering ? 'Register Profile' : 'Secure Sign In'}</h2>
                 <p>
-                  {isRegistering
-                    ? step === 5
-                      ? `Step ${step} of ${TOTAL_STEPS}: Verify your email`
-                      : `Step ${step} of ${TOTAL_STEPS}: Setup your medical profile`
-                    : 'Access clinical systems using secure credentials'}
+                  {isForgotPassword
+                    ? 'Request a secure email verification reset link'
+                    : isRegistering
+                      ? step === 5
+                        ? `Step ${step} of ${TOTAL_STEPS}: Verify your email`
+                        : `Step ${step} of ${TOTAL_STEPS}: Setup your medical profile`
+                      : 'Access clinical systems using secure credentials'}
                 </p>
               </div>
 
@@ -507,6 +539,184 @@ const Login = () => {
                       </div>
                     )}
                   </>
+                ) : isForgotPassword ? (
+                  resetSent ? (
+                    <div className="forgot-success-box">
+                      <div className="success-glowing-border">
+                        <Mail size={40} className="success-icon-pulse" />
+                        <h3>Reset Link Sent!</h3>
+                        <p>A password reset link has been successfully sent to <strong style={{ color: '#0ea5e9' }}>{email}</strong>. Please check your inbox.</p>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => {
+                            setIsForgotPassword(false);
+                            setResetSent(false);
+                            setError(null);
+                          }}
+                          style={{ margin: '1rem auto 0', display: 'block' }}
+                        >
+                          Back to Sign In
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="form-group">
+                        <label className="form-label">Account System Role</label>
+                        <select value={role} onChange={e => setRole(e.target.value)} className="custom-select">
+                          <option value="patient">Patient System</option>
+                          <option value="doctor">Doctor Network</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Email Address</label>
+                        <div className="input-with-icon">
+                          <Mail className="input-icon" size={18} />
+                          <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="name@example.com" />
+                        </div>
+                      </div>
+                    </>
+                  )
+                ) : isRegistering ? (
+                  <>
+                    {/* STEP 1 */}
+                    {step === 1 && (
+                      <div className="step-slide">
+                        <h3 className="slide-title">Tell us who you are</h3>
+                        <div className="form-group">
+                          <label className="form-label">First Name</label>
+                          <div className="input-with-icon">
+                            <User className="input-icon" size={18} />
+                            <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} required placeholder="e.g. John" />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Last Name</label>
+                          <div className="input-with-icon">
+                            <User className="input-icon" size={18} />
+                            <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} required placeholder="e.g. Doe" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 2 */}
+                    {step === 2 && (
+                      <div className="step-slide">
+                        <h3 className="slide-title">Profile parameters</h3>
+                        <div className="form-group">
+                          <label className="form-label">Age</label>
+                          <div className="input-with-icon">
+                            <Calendar className="input-icon" size={18} />
+                            <input type="number" value={age} onChange={e => setAge(e.target.value)} required placeholder="Years" min="1" />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Register as a</label>
+                          <select value={role} onChange={e => setRole(e.target.value)} className="custom-select">
+                            <option value="patient">Patient Profile</option>
+                            <option value="doctor">Doctor / Practitioner</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 3 */}
+                    {step === 3 && (
+                      <div className="step-slide">
+                        <h3 className="slide-title">Verification &amp; Linking</h3>
+                        <div className="form-group">
+                          <label className="form-label">Phone Number</label>
+                          <div className="input-with-icon">
+                            <Phone className="input-icon" size={18} />
+                            <input type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} required placeholder="+1 (555) 000-0000" />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">
+                            {role === 'doctor' ? 'Create Doctor ID (e.g., DOC123) *' : 'Doctor ID Code *'}
+                          </label>
+                          <div className="input-with-icon">
+                            <Stethoscope className="input-icon" size={18} />
+                            <input type="text" value={doctorCode} onChange={e => setDoctorCode(e.target.value)} placeholder={role === 'doctor' ? "e.g. DOC778" : "e.g. DOC112"} required />
+                          </div>
+                          <div className="helper-text">
+                            {role === 'doctor'
+                              ? 'Set a unique alphanumeric code that patients can use to link with you.'
+                              : 'Enter the unique ID code supplied by your attending physician.'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 4 */}
+                    {step === 4 && (
+                      <div className="step-slide">
+                        <h3 className="slide-title">Account Credentials</h3>
+                        <div className="form-group">
+                          <label className="form-label">Email Address</label>
+                          <div className="input-with-icon">
+                            <Mail className="input-icon" size={18} />
+                            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="johndoe@clinical.com" />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Password</label>
+                          <div className="input-with-icon">
+                            <Lock className="input-icon" size={18} />
+                            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+                          </div>
+                        </div>
+                        <div className="helper-text" style={{display:'flex', alignItems:'center', gap:'5px', marginTop:'-0.25rem'}}>
+                          <Mail size={12} />
+                          A 6-digit verification code will be sent to your email after this step.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 5 — OTP */}
+                    {step === 5 && (
+                      <div className="step-slide">
+                        <h3 className="slide-title">Verify Your Email</h3>
+                        <div className="otp-email-hint">
+                          <Mail size={15} />
+                          <span>Code sent to <strong>{email}</strong></span>
+                        </div>
+                        <p className="otp-instruction">Enter the 6-digit code from your inbox:</p>
+
+                        <div className="otp-boxes" onPaste={handleOtpPaste}>
+                          {otpDigits.map((digit, i) => (
+                            <input
+                              key={i}
+                              ref={el => (otpRefs.current[i] = el)}
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={1}
+                              value={digit}
+                              onChange={e => handleOtpChange(i, e.target.value)}
+                              onKeyDown={e => handleOtpKeyDown(i, e)}
+                              className={`otp-box${digit ? ' otp-filled' : ''}`}
+                              autoFocus={i === 0}
+                            />
+                          ))}
+                        </div>
+
+                        <div className="otp-resend-row">
+                          <span className="otp-resend-label">Didn't receive it?</span>
+                          <button
+                            type="button"
+                            onClick={handleResendOTP}
+                            disabled={resendCooldown > 0 || otpSending}
+                            className="otp-resend-btn"
+                          >
+                            <RefreshCw size={13} />
+                            {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   /* LOGIN VIEW */
                   <>
@@ -530,12 +740,30 @@ const Login = () => {
                         <Lock className="input-icon" size={18} />
                         <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
                       </div>
+                      <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
+                        <button
+                          type="button"
+                          className="btn-link"
+                          onClick={() => {
+                            setError(null);
+                            setIsForgotPassword(true);
+                          }}
+                          style={{ fontSize: '0.8rem', padding: 0 }}
+                        >
+                          Forgot Password?
+                        </button>
+                      </div>
                     </div>
                   </>
                 )}
 
                 {/* ACTIONS */}
                 <div className="form-actions">
+                  {isForgotPassword && !resetSent && (
+                    <button type="button" onClick={() => { setError(null); setIsForgotPassword(false); }} className="btn btn-outline flex-1" disabled={isBusy}>
+                      Cancel
+                    </button>
+                  )}
                   {isRegistering && step > 1 && step <= 4 && (
                     <button type="button" onClick={() => { setError(null); goToStep(step - 1); }} className="btn btn-outline flex-1" disabled={isBusy}>
                       <ChevronLeft size={18} /> Back
@@ -546,30 +774,36 @@ const Login = () => {
                       <ChevronLeft size={18} /> Back
                     </button>
                   )}
-                  <button className="btn btn-primary flex-1 action-submit-btn" type="submit" disabled={isBusy}>
-                    {isBusy ? (
-                      <span className="btn-spinner">
-                        <span className="spinner-dot"></span>
-                        <span className="spinner-dot"></span>
-                        <span className="spinner-dot"></span>
-                      </span>
-                    ) : isRegistering ? (
-                      step === 4 ? <><Mail size={17} /> Send Code</> :
-                      step === 5 ? <><CheckCircle size={17} /> Verify &amp; Register</> :
-                      <>Continue <ChevronRight size={18} /></>
-                    ) : (
-                      <>Sign In <LogIn size={18} /></>
-                    )}
-                  </button>
+                  {!resetSent && (
+                    <button className="btn btn-primary flex-1 action-submit-btn" type="submit" disabled={isBusy}>
+                      {isBusy ? (
+                        <span className="btn-spinner">
+                          <span className="spinner-dot"></span>
+                          <span className="spinner-dot"></span>
+                          <span className="spinner-dot"></span>
+                        </span>
+                      ) : isForgotPassword ? (
+                        <><Send size={17} /> Send Reset Link</>
+                      ) : isRegistering ? (
+                        step === 4 ? <><Mail size={17} /> Send Code</> :
+                        step === 5 ? <><CheckCircle size={17} /> Verify &amp; Register</> :
+                        <>Continue <ChevronRight size={18} /></>
+                      ) : (
+                        <>Sign In <LogIn size={18} /></>
+                      )}
+                    </button>
+                  )}
                 </div>
               </form>
 
               <div className="auth-footer">
-                <button className="btn-link" type="button" onClick={toggleMode} disabled={isBusy}>
-                  {isRegistering
-                    ? 'Already have a clinical account? Sign In'
-                    : 'Request a new clinical profile? Sign Up'}
-                </button>
+                {!isForgotPassword && (
+                  <button className="btn-link" type="button" onClick={toggleMode} disabled={isBusy}>
+                    {isRegistering
+                      ? 'Already have a clinical account? Sign In'
+                      : 'Request a new clinical profile? Sign Up'}
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -837,6 +1071,53 @@ const Login = () => {
         .auth-footer { margin-top: 1.75rem; text-align: center; }
         .btn-link { background: none; border: none; color: var(--accent); font-weight: 600; font-size: 0.85rem; transition: color 0.2s; cursor: pointer; }
         .btn-link:hover { color: white; text-decoration: none; }
+
+        /* Forgot Password Success Box */
+        .forgot-success-box {
+          text-align: center;
+          padding: 0.5rem;
+          animation: slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .success-glowing-border {
+          border: 2px solid rgba(16, 185, 129, 0.4);
+          background: rgba(16, 185, 129, 0.04);
+          border-radius: 1rem;
+          padding: 2rem 1.5rem;
+          box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+          animation: blink-border 1.5s infinite alternate;
+        }
+        @keyframes blink-border {
+          0% {
+            border-color: rgba(16, 185, 129, 0.2);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.03);
+          }
+          100% {
+            border-color: #10b981;
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.35);
+          }
+        }
+        .success-icon-pulse {
+          color: #10b981;
+          margin-bottom: 1rem;
+          animation: scaleUpIcon 0.5s ease-out;
+        }
+        @keyframes scaleUpIcon {
+          0% { transform: scale(0.6); opacity: 0; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .success-glowing-border h3 {
+          color: #ffffff;
+          font-size: 1.25rem;
+          font-weight: 700;
+          margin: 0 0 0.5rem;
+          font-family: 'Outfit', sans-serif;
+        }
+        .success-glowing-border p {
+          color: #94a3b8;
+          font-size: 0.88rem;
+          line-height: 1.5;
+          margin: 0;
+        }
       `}</style>
     </div>
   );
