@@ -14,7 +14,8 @@
   },
 
   // Start app containers automatically when the Codespace opens
-  "postStartCommand": "docker compose up -d --build",
+  "postCreateCommand": "docker compose up -d",
+  "postStartCommand": "docker compose up -d",
 
   // ── Port Forwarding ─────────────────────────────────────────────────────────
   // Only port 5173 (Nginx frontend) needs to be public.
