@@ -1,19 +1,25 @@
 {
   "name": "Mini EHR",
 
-  // Use the docker-compose.yml in the repo root
-  "dockerComposeFile": "../docker-compose.yml",
+  // Use a standard Ubuntu container as the VS Code host.
+  // docker compose will run the actual app containers as sidecars.
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
 
-  // The main container the dev tools connect to
-  "service": "frontend",
+  // Install docker + docker compose inside the devcontainer
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    }
+  },
 
-  // Mount the whole workspace inside the container
-  "workspaceFolder": "/workspace",
+  // Start app containers automatically when the Codespace opens
+  "postStartCommand": "docker compose up -d --build",
 
   // ── Port Forwarding ─────────────────────────────────────────────────────────
-  // Only expose port 5173 (the Nginx frontend). Nginx proxies all backend
-  // API calls to port 8000 over the internal Docker network, so port 8000
-  // does NOT need to be forwarded or made public.
+  // Only port 5173 (Nginx frontend) needs to be public.
+  // Nginx proxies /auth, /patients, /alerts, etc. to the backend container
+  // over the internal Docker network — the browser never touches port 8000.
   "forwardPorts": [5173],
 
   "portsAttributes": {
@@ -24,10 +30,7 @@
     }
   },
 
-  // Automatically start containers when the Codespace opens
-  "postStartCommand": "docker compose up -d",
-
-  // Recommended VS Code extensions for this project
+  // Recommended VS Code extensions
   "customizations": {
     "vscode": {
       "extensions": [
@@ -39,3 +42,4 @@
     }
   }
 }
+
