@@ -1,0 +1,41 @@
+{
+  "name": "Mini EHR",
+
+  // Use the docker-compose.yml in the repo root
+  "dockerComposeFile": "../docker-compose.yml",
+
+  // The main container the dev tools connect to
+  "service": "frontend",
+
+  // Mount the whole workspace inside the container
+  "workspaceFolder": "/workspace",
+
+  // ── Port Forwarding ─────────────────────────────────────────────────────────
+  // Only expose port 5173 (the Nginx frontend). Nginx proxies all backend
+  // API calls to port 8000 over the internal Docker network, so port 8000
+  // does NOT need to be forwarded or made public.
+  "forwardPorts": [5173],
+
+  "portsAttributes": {
+    "5173": {
+      "label": "Mini EHR App",
+      "onAutoForward": "openBrowser",
+      "visibility": "public"
+    }
+  },
+
+  // Automatically start containers when the Codespace opens
+  "postStartCommand": "docker compose up -d",
+
+  // Recommended VS Code extensions for this project
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
+}
