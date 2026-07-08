@@ -1,4 +1,4 @@
--- Mini EHR DB Migration Script
+-- MedLink DB Migration Script
 -- Run this inside the Supabase SQL editor to enable new patient profiles and symptom check-in attributes.
 
 -- ADD NEW SYMPTOMS COLUMNS IF NOT ALREADY PRESENT

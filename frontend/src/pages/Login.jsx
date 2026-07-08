@@ -308,7 +308,7 @@ const Login = () => {
         <div className="visual-header">
           <div className="brand-logo">
             <Stethoscope size={32} className="logo-icon" />
-            <span className="brand-name">CareMed</span>
+            <span className="brand-name">MedLink</span>
             <span className="brand-badge">EHR</span>
           </div>
         </div>
@@ -342,7 +342,7 @@ const Login = () => {
           </div>
         </div>
         <div className="visual-footer">
-          <p>© 2026 CareMed EHR Network. All health records encrypted end-to-end.</p>
+          <p>© 2026 MedLink EHR Network. All health records encrypted end-to-end.</p>
         </div>
       </div>
 
@@ -358,7 +358,7 @@ const Login = () => {
               </div>
               <h2 className="success-title">Successfully Registered!</h2>
               <p className="success-subtitle">
-                Welcome to CareMed EHR. Redirecting you to the login page…
+                Welcome to MedLink EHR. Redirecting you to the login page…
               </p>
               {createdDoctorCode && (
                 <div className="success-code-box">

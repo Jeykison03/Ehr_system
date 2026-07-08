@@ -36,7 +36,7 @@ const DoctorSidebar = ({ profile, onLogout }) => {
           <Stethoscope size={22} color="white" />
         </div>
         <div className="brand-info">
-          <h3 className="brand-title">Mini EHR</h3>
+          <h3 className="brand-title">MedLink</h3>
           <p className="brand-sub">Doctor Portal</p>
         </div>
       </div>

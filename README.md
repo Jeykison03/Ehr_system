@@ -1,6 +1,6 @@
-# 🩺 Mini EHR — Advanced Healthcare Portal & AI Diagnostics
+# 🩺 MedLink — Advanced Healthcare Portal & AI Diagnostics
 
-Welcome to **Mini EHR**, a modern, secure, and state-of-the-art Electronic Health Record (EHR) web application. Designed for seamless collaboration between patients and healthcare professionals, Mini EHR combines rich dashboards, interactive charting, secure messaging/alerts, and a vision-based AI parser to scan and decode medical prescriptions.
+Welcome to **MedLink**, a modern, secure, and state-of-the-art Electronic Health Record (EHR) web application. Designed for seamless collaboration between patients and healthcare professionals, MedLink combines rich dashboards, interactive charting, secure messaging/alerts, and a vision-based AI parser to scan and decode medical prescriptions.
 
 ---
 

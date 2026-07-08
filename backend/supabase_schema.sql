@@ -1,4 +1,4 @@
--- Mini EHR: doctor ↔ patient assignment + notifications
+-- MedLink: doctor ↔ patient assignment + notifications
 -- Run this in Supabase SQL editor (recommended).
 
 -- PROFILES: doctor_code + assigned doctor

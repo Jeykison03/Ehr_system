@@ -39,10 +39,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("MiniEHR-Backend")
+logger = logging.getLogger("MedLink-Backend")
 
 app = FastAPI(
-    title="Mini EHR - Advanced Medical API",
+    title="MedLink - Advanced Medical API",
     description="Secure Backend for Healthcare Data Management with Custom SQL Engine",
     version="2.1.0"
 )
@@ -73,8 +73,8 @@ def send_reset_email(to_email: str, reset_link: str) -> bool:
     """Sends a password reset link email via Gmail SMTP. Returns True on success."""
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "CareMed EHR — Reset Your Password"
-        msg["From"] = f"CareMed EHR <{SMTP_USER}>"
+        msg["Subject"] = "MedLink EHR — Reset Your Password"
+        msg["From"] = f"MedLink EHR <{SMTP_USER}>"
         msg["To"] = to_email
 
         html_body = f"""
@@ -85,7 +85,7 @@ def send_reset_email(to_email: str, reset_link: str) -> bool:
                 <table width="520" cellpadding="0" cellspacing="0" style="background:#0f1729;border:1px solid rgba(255,255,255,0.07);border-radius:16px;overflow:hidden;">
                   <tr>
                     <td style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);padding:28px 40px;text-align:center;">
-                      <h1 style="color:white;margin:0;font-size:1.6rem;letter-spacing:-0.5px;">&#128137; CareMed EHR</h1>
+                      <h1 style="color:white;margin:0;font-size:1.6rem;letter-spacing:-0.5px;">&#128137; MedLink EHR</h1>
                       <p style="color:rgba(255,255,255,0.75);margin:6px 0 0;font-size:0.9rem;">Electronic Health Record Network</p>
                     </td>
                   </tr>
@@ -103,7 +103,7 @@ def send_reset_email(to_email: str, reset_link: str) -> bool:
                   </tr>
                   <tr>
                     <td style="background:#070913;padding:20px 40px;border-top:1px solid rgba(255,255,255,0.04);text-align:center;">
-                      <p style="color:#334155;font-size:0.8rem;margin:0;">© 2026 CareMed EHR Network. All health records encrypted end-to-end.</p>
+                      <p style="color:#334155;font-size:0.8rem;margin:0;">© 2026 MedLink EHR Network. All health records encrypted end-to-end.</p>
                     </td>
                   </tr>
                 </table>
@@ -129,8 +129,8 @@ def send_otp_email(to_email: str, otp: str) -> bool:
     """Sends a 6-digit OTP via Gmail SMTP. Returns True on success."""
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "CareMed EHR — Your Verification Code"
-        msg["From"] = f"CareMed EHR <{SMTP_USER}>"
+        msg["Subject"] = "MedLink EHR — Your Verification Code"
+        msg["From"] = f"MedLink EHR <{SMTP_USER}>"
         msg["To"] = to_email
 
         html_body = f"""
@@ -141,7 +141,7 @@ def send_otp_email(to_email: str, otp: str) -> bool:
                 <table width="520" cellpadding="0" cellspacing="0" style="background:#0f1729;border:1px solid rgba(255,255,255,0.07);border-radius:16px;overflow:hidden;">
                   <tr>
                     <td style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);padding:28px 40px;text-align:center;">
-                      <h1 style="color:white;margin:0;font-size:1.6rem;letter-spacing:-0.5px;">&#128137; CareMed EHR</h1>
+                      <h1 style="color:white;margin:0;font-size:1.6rem;letter-spacing:-0.5px;">&#128137; MedLink EHR</h1>
                       <p style="color:rgba(255,255,255,0.75);margin:6px 0 0;font-size:0.9rem;">Electronic Health Record Network</p>
                     </td>
                   </tr>
@@ -152,12 +152,12 @@ def send_otp_email(to_email: str, otp: str) -> bool:
                       <div style="display:flex;justify-content:center;margin:0 0 32px;">
                         <div style="letter-spacing:12px;font-size:2.8rem;font-weight:700;color:white;background:rgba(14,165,233,0.1);border:2px solid rgba(14,165,233,0.3);border-radius:12px;padding:18px 32px;text-align:center;font-family:'Courier New',monospace;">{otp}</div>
                       </div>
-                      <p style="color:#64748b;font-size:0.82rem;line-height:1.5;margin:0;">If you did not attempt to register on CareMed EHR, you can safely ignore this email. Do not share this code with anyone.</p>
+                      <p style="color:#64748b;font-size:0.82rem;line-height:1.5;margin:0;">If you did not attempt to register on MedLink EHR, you can safely ignore this email. Do not share this code with anyone.</p>
                     </td>
                   </tr>
                   <tr>
                     <td style="background:#070913;padding:20px 40px;border-top:1px solid rgba(255,255,255,0.04);text-align:center;">
-                      <p style="color:#334155;font-size:0.8rem;margin:0;">© 2026 CareMed EHR Network. All health records encrypted end-to-end.</p>
+                      <p style="color:#334155;font-size:0.8rem;margin:0;">© 2026 MedLink EHR Network. All health records encrypted end-to-end.</p>
                     </td>
                   </tr>
                 </table>
@@ -1338,5 +1338,5 @@ def debug_info():
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting Mini EHR API on http://0.0.0.0:8000")
+    logger.info("Starting MedLink API on http://0.0.0.0:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
