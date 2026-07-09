@@ -17,7 +17,7 @@ if not os.environ.get("GROQ_API_KEY"):
 if not os.environ.get("SMTP_USER"):
     os.environ["SMTP_USER"] = "jeykison2000@gmail.com"
 if not os.environ.get("SMTP_PASS"):
-    os.environ["SMTP_PASS"] = "rbyr tger yowo psit"
+    os.environ["SMTP_PASS"] = "bqfu dkxs kihf sbsx"
 
 
 import logging
